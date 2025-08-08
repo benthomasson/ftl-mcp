@@ -21,7 +21,7 @@ def get_current_time() -> str:
 
 
 @mcp.tool()
-def calculate_speed(distance: float, time: float) -> dict[str, str]:
+def calculate_speed(distance: float, time: float) -> dict:
     """Calculate speed given distance and time.
     
     Args:
@@ -35,7 +35,7 @@ def calculate_speed(distance: float, time: float) -> dict[str, str]:
 
 
 @mcp.tool()
-def list_directory(path: str = ".") -> dict[str, str]:
+def list_directory(path: str = ".") -> dict:
     """List contents of a directory.
     
     Args:
@@ -47,7 +47,7 @@ def list_directory(path: str = ".") -> dict[str, str]:
     return _list_directory(path)
 
 
-@mcp.resource("file://{path}")
+@mcp.resource("file://{path}")  
 def read_file(path: str) -> str:
     """Read the contents of a file.
     
@@ -61,7 +61,7 @@ def read_file(path: str) -> str:
 
 
 @mcp.resource("env://")
-def list_environment_variables() -> dict[str, str]:
+def list_environment_variables() -> dict:
     """List all environment variables."""
     return _list_environment_variables()
 
