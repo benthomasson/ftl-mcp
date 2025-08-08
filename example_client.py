@@ -206,9 +206,12 @@ Some fun facts:
                 "distance": 0.5
             })
             mission_data = json.loads(result.content[0].text) if isinstance(result.content[0].text, str) else result.content[0].text
-            print(f"   Status: {mission_data['status']}")
-            print(f"   Fuel remaining: {mission_data['fuel_level']}%")
-            print(f"   Distance traveled: {mission_data['distance_traveled']} ly")
+            if "error" not in mission_data:
+                print(f"   Status: {mission_data['status']}")
+                print(f"   Fuel remaining: {mission_data['fuel_level']}%")
+                print(f"   Distance traveled: {mission_data['distance_traveled']} ly")
+            else:
+                print(f"   Error: {mission_data['error']}")
             print()
             
             # Update mission - travel phase with alert
@@ -277,6 +280,148 @@ Some fun facts:
             print("   ✅ Automatic alert generation based on state")
             print("   ✅ Proper state cleanup on completion")
             print("   ✅ State persistence demonstrated across 6 separate tool calls")
+            print()
+            
+            # Example 9: Ansible Inventory Management
+            print("📋 Example 9: Ansible Inventory Management")
+            
+            # Load the sample inventory
+            print("Loading Ansible inventory...")
+            result = await session.call_tool("load_inventory", {
+                "inventory_path": "sample_inventory.yml"
+            })
+            load_data = json.loads(result.content[0].text) if isinstance(result.content[0].text, str) else result.content[0].text
+            if "error" not in load_data:
+                print(f"✅ Inventory loaded: {load_data['inventory_file']}")
+                print(f"   Total hosts: {load_data['total_hosts']}")
+                print(f"   Total groups: {load_data['total_groups']}")
+                print(f"   Groups: {', '.join(load_data['groups'][:5])}" + ("..." if len(load_data['groups']) > 5 else ""))
+            else:
+                print(f"❌ Failed to load inventory: {load_data['error']}")
+                return
+            print()
+            
+            # Get inventory status
+            print("Getting inventory status...")
+            result = await session.call_tool("get_inventory_status", {})
+            status_data = json.loads(result.content[0].text) if isinstance(result.content[0].text, str) else result.content[0].text
+            if status_data.get("inventory_loaded"):
+                print(f"   Source file: {status_data['source_file']}")
+                print(f"   Loaded at: {status_data['loaded_at']}")
+                print(f"   Total hosts: {status_data['total_hosts']}")
+                print(f"   Total groups: {status_data['total_groups']}")
+            print()
+            
+            # Get all groups
+            print("Retrieving all inventory groups...")
+            result = await session.call_tool("get_inventory_groups", {})
+            groups_data = json.loads(result.content[0].text) if isinstance(result.content[0].text, str) else result.content[0].text
+            if "error" not in groups_data:
+                print(f"   Found {groups_data['group_count']} groups:")
+                for group_name, group_info in list(groups_data['groups'].items())[:3]:  # Show first 3 groups
+                    print(f"     - {group_name}: {len(group_info['hosts'])} hosts")
+                    if group_info['vars']:
+                        print(f"       vars: {', '.join(list(group_info['vars'].keys())[:3])}")
+            print()
+            
+            # Get hosts from a specific group
+            print("Getting hosts from 'webservers' group...")
+            result = await session.call_tool("get_inventory_hosts", {
+                "group_name": "webservers"
+            })
+            hosts_data = json.loads(result.content[0].text) if isinstance(result.content[0].text, str) else result.content[0].text
+            if "error" not in hosts_data:
+                print(f"   Found {hosts_data['host_count']} hosts in group '{hosts_data['group']}':")
+                for host_name, host_info in list(hosts_data['hosts'].items())[:3]:  # Show first 3 hosts
+                    print(f"     - {host_name}")
+                    if 'ansible_host' in host_info['vars']:
+                        print(f"       IP: {host_info['vars']['ansible_host']}")
+                    if 'server_role' in host_info['vars']:
+                        print(f"       Role: {host_info['vars']['server_role']}")
+            print()
+            
+            # Get all hosts
+            print("Getting all hosts from inventory...")
+            result = await session.call_tool("get_inventory_hosts", {})
+            all_hosts_data = json.loads(result.content[0].text) if isinstance(result.content[0].text, str) else result.content[0].text
+            if "error" not in all_hosts_data:
+                print(f"   Total hosts: {all_hosts_data['host_count']}")
+                host_names = list(all_hosts_data['hosts'].keys())
+                print(f"   Sample hosts: {', '.join(host_names[:5])}" + ("..." if len(host_names) > 5 else ""))
+            print()
+            
+            # Save inventory to a new file
+            print("Saving inventory to output file...")
+            result = await session.call_tool("save_inventory", {
+                "output_path": "output_inventory.yml"
+            })
+            save_data = json.loads(result.content[0].text) if isinstance(result.content[0].text, str) else result.content[0].text
+            if "error" not in save_data:
+                print(f"✅ Inventory saved: {save_data['output_file']}")
+                print(f"   Total hosts: {save_data['total_hosts']}")
+                print(f"   Total groups: {save_data['total_groups']}")
+            else:
+                print(f"❌ Failed to save inventory: {save_data['error']}")
+            print()
+            
+            print("📋 Ansible Inventory Demo Summary:")
+            print("   ✅ Loaded YAML inventory into context state")
+            print("   ✅ Retrieved inventory status from state")
+            print("   ✅ Listed all groups with metadata")
+            print("   ✅ Filtered hosts by group")
+            print("   ✅ Retrieved all hosts with variables")
+            print("   ✅ Parsed complex Ansible inventory structure")
+            print("   ✅ Saved inventory back to YAML file")
+            print("   ✅ State management across multiple inventory operations")
+            
+            # Example 10: Session ID Management
+            print("🔒 Example 10: Session ID Management")
+            
+            # Start session tracker
+            print("Starting session tracker...")
+            result = await session.call_tool("start_session_tracker", {
+                "session_name": "FTL MCP Demo Session"
+            })
+            session_data = json.loads(result.content[0].text) if isinstance(result.content[0].text, str) else result.content[0].text
+            if "error" not in session_data:
+                print(f"✅ Session started: {session_data['session_name']}")
+                print(f"   Session ID: {session_data['session_id']}")
+                print(f"   Client ID: {session_data['client_id']}")
+            print()
+            
+            # Add session data
+            print("Adding session-specific data...")
+            session_updates = [
+                ("demo_mode", "active"),
+                ("features_tested", "10"),
+                ("last_operation", "ansible_inventory")
+            ]
+            
+            for key, value in session_updates:
+                result = await session.call_tool("update_session_data", {
+                    "key": key,
+                    "value": value
+                })
+                update_data = json.loads(result.content[0].text) if isinstance(result.content[0].text, str) else result.content[0].text
+                if "error" not in update_data:
+                    print(f"   Added: {key} = {value}")
+            print()
+            
+            # Get session info
+            print("Retrieving session information...")
+            result = await session.call_tool("get_session_info", {})
+            info_data = json.loads(result.content[0].text) if isinstance(result.content[0].text, str) else result.content[0].text
+            if info_data.get("session_found"):
+                print(f"   Session: {info_data['session_name']}")
+                print(f"   Requests: {info_data['request_count']}")
+                print(f"   Data: {info_data['session_data']}")
+            print()
+            
+            print("🔒 Session Management Demo Summary:")
+            print("   ✅ Created session tracker using session ID")
+            print("   ✅ Stored session-specific key-value data")
+            print("   ✅ Retrieved session info with activity tracking")
+            print("   ✅ Demonstrated session isolation and persistence")
 
 
 def main():

@@ -1,0 +1,85 @@
+---
+# Sample Ansible Inventory for FTL MCP Testing
+all:
+  vars:
+    ansible_user: deploy
+    ansible_ssh_private_key_file: ~/.ssh/id_rsa
+  children:
+    webservers:
+      hosts:
+        web01.example.com:
+          ansible_host: 10.0.1.10
+          server_role: frontend
+          nginx_port: 80
+        web02.example.com:
+          ansible_host: 10.0.1.11
+          server_role: frontend
+          nginx_port: 80
+        web03.example.com:
+          ansible_host: 10.0.1.12
+          server_role: frontend
+          nginx_port: 8080
+      vars:
+        http_port: 80
+        https_port: 443
+        
+    databases:
+      hosts:
+        db01.example.com:
+          ansible_host: 10.0.2.10
+          server_role: primary
+          mysql_port: 3306
+        db02.example.com:
+          ansible_host: 10.0.2.11
+          server_role: replica
+          mysql_port: 3306
+      vars:
+        mysql_root_password: "{{ vault_mysql_root_password }}"
+        backup_enabled: true
+        
+    loadbalancers:
+      hosts:
+        lb01.example.com:
+          ansible_host: 10.0.0.10
+          server_role: active
+          haproxy_stats_port: 8404
+        lb02.example.com:
+          ansible_host: 10.0.0.11
+          server_role: standby
+          haproxy_stats_port: 8404
+      vars:
+        keepalived_vip: 10.0.0.100
+        
+    monitoring:
+      hosts:
+        monitor01.example.com:
+          ansible_host: 10.0.3.10
+          server_role: prometheus
+          prometheus_port: 9090
+        monitor02.example.com:
+          ansible_host: 10.0.3.11
+          server_role: grafana
+          grafana_port: 3000
+      vars:
+        retention_days: 30
+        alert_manager_url: http://10.0.3.10:9093
+
+# Environment-specific groups
+production:
+  children:
+    webservers:
+    databases:
+    loadbalancers:
+    monitoring:
+  vars:
+    environment: production
+    backup_schedule: "0 2 * * *"
+    
+development:
+  hosts:
+    dev01.example.com:
+      ansible_host: 192.168.1.100
+      server_role: all-in-one
+  vars:
+    environment: development
+    debug_mode: true
