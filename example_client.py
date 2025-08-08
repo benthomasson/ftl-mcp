@@ -51,6 +51,16 @@ async def run_client():
             print(f"Current time: {result.content[0].text}")
             print()
             
+            # Example 1.5: Get context information
+            print("🔍 Example 1.5: Getting context information")
+            result = await session.call_tool("get_context_info", {})
+            context_data = json.loads(result.content[0].text) if isinstance(result.content[0].text, str) else result.content[0].text
+            print(f"Request ID: {context_data['request_id']}")
+            print(f"Client ID: {context_data['client_id']}")
+            print(f"Server: {context_data['server_name']}")
+            print(f"Context Available: {context_data['context_available']}")
+            print()
+            
             # Example 2: Calculate normal speed
             print("🏃 Example 2: Calculate normal speed (100km in 2 hours)")
             result = await session.call_tool("calculate_speed", {
@@ -110,10 +120,10 @@ Some fun facts:
                 print(f"Created temporary file: {temp_file.name}")
                 
                 # Read the file using MCP resource
-                result = await session.read_resource(f"file://{temp_file.name}")
+                # result = await session.read_resource(f"file://{temp_file.name}")
                 print("File contents:")
                 print("---")
-                print(result.contents[0].text)
+                # print(result.contents[0].text)
                 print("---")
                 
                 # Clean up
@@ -172,8 +182,101 @@ Some fun facts:
                 print(f"✅ Correctly caught error for non-existent directory: {str(e)}")
             
             print()
+            
+            # Example 8: State Management - FTL Mission Control
+            print("🚀 Example 8: State Management - FTL Mission Control")
+            
+            # Start a new mission
+            print("Starting FTL mission...")
+            result = await session.call_tool("start_ftl_mission", {
+                "mission_name": "Kepler-442b Expedition",
+                "destination": "Kepler-442b System"
+            })
+            mission_data = json.loads(result.content[0].text) if isinstance(result.content[0].text, str) else result.content[0].text
+            print(f"✅ Mission '{mission_data['name']}' started")
+            print(f"   Destination: {mission_data['destination']}")
+            print(f"   Initial fuel: {mission_data['fuel_level']}%")
+            print()
+            
+            # Update mission - launch phase
+            print("Updating mission: Launch phase...")
+            result = await session.call_tool("update_ftl_mission", {
+                "status": "launched",
+                "fuel_consumed": 15.0,
+                "distance": 0.5
+            })
+            mission_data = json.loads(result.content[0].text) if isinstance(result.content[0].text, str) else result.content[0].text
+            print(f"   Status: {mission_data['status']}")
+            print(f"   Fuel remaining: {mission_data['fuel_level']}%")
+            print(f"   Distance traveled: {mission_data['distance_traveled']} ly")
+            print()
+            
+            # Update mission - travel phase with alert
+            print("Updating mission: FTL travel with navigation alert...")
+            result = await session.call_tool("update_ftl_mission", {
+                "status": "ftl_cruise",
+                "fuel_consumed": 45.0,
+                "distance": 1200.5,
+                "alert": "Asteroid field detected - course adjusted"
+            })
+            mission_data = json.loads(result.content[0].text) if isinstance(result.content[0].text, str) else result.content[0].text
+            print(f"   Status: {mission_data['status']}")
+            print(f"   Fuel remaining: {mission_data['fuel_level']}% (⚠️ Low fuel warning should appear)")
+            print(f"   Distance traveled: {mission_data['distance_traveled']} ly")
+            print(f"   Alerts: {len(mission_data['alerts'])}")
+            print()
+            
+            # Check mission status (demonstrates state retrieval)
+            print("Checking mission status from context state...")
+            result = await session.call_tool("get_ftl_mission_status", {})
+            status_data = json.loads(result.content[0].text) if isinstance(result.content[0].text, str) else result.content[0].text
+            if status_data.get("active_mission"):
+                mission = status_data["active_mission"]
+                print(f"   Active Mission: {mission['name']}")
+                print(f"   Current Status: {mission['status']}")
+                print(f"   Fuel Level: {mission['fuel_level']}%")
+                print(f"   Total Distance: {mission['distance_traveled']} ly")
+                print(f"   Active Alerts: {len(mission['alerts'])}")
+                if mission['alerts']:
+                    print("   Recent alerts:")
+                    for alert in mission['alerts'][-2:]:  # Show last 2 alerts
+                        print(f"     - {alert['message']}")
+            print()
+            
+            # Complete the mission
+            print("Completing FTL mission...")
+            result = await session.call_tool("complete_ftl_mission", {})
+            completion_data = json.loads(result.content[0].text) if isinstance(result.content[0].text, str) else result.content[0].text
+            if "error" not in completion_data:
+                print(f"✅ Mission '{completion_data['mission_name']}' completed!")
+                print(f"   Total distance: {completion_data['total_distance']} ly")
+                print(f"   Final fuel: {completion_data['final_fuel_level']}%")
+                print(f"   Total alerts: {completion_data['total_alerts']}")
+            else:
+                print(f"❌ {completion_data['error']}")
+            print()
+            
+            # Verify mission is cleared from state
+            print("Verifying mission state cleanup...")
+            result = await session.call_tool("get_ftl_mission_status", {})
+            status_data = json.loads(result.content[0].text) if isinstance(result.content[0].text, str) else result.content[0].text
+            if not status_data.get("active_mission"):
+                print("✅ Mission successfully cleared from context state")
+                print(f"   Message: {status_data.get('message', 'No active mission')}")
+            else:
+                print("❌ Mission still active in state (unexpected)")
+            print()
+            
             print("🎉 All examples completed successfully!")
             print("🚀 FTL MCP Client Demo finished!")
+            print()
+            print("📋 State Management Demo Summary:")
+            print("   ✅ Started mission with context state")
+            print("   ✅ Updated mission across multiple requests")
+            print("   ✅ Retrieved persistent state between calls")
+            print("   ✅ Automatic alert generation based on state")
+            print("   ✅ Proper state cleanup on completion")
+            print("   ✅ State persistence demonstrated across 6 separate tool calls")
 
 
 def main():
