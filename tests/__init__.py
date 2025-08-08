@@ -1,0 +1,1 @@
+"""Tests for FTL MCP server."""

@@ -1,12 +1,14 @@
 """FTL MCP server implementation using fastmcp."""
 
-import asyncio
-import os
-from datetime import datetime
-from pathlib import Path
-from typing import Any
-
 from fastmcp import FastMCP
+
+from .tools import (
+    get_current_time as _get_current_time,
+    calculate_speed as _calculate_speed,
+    list_directory as _list_directory,
+    read_file as _read_file,
+    list_environment_variables as _list_environment_variables,
+)
 
 # Create the MCP server
 mcp = FastMCP("ftl-mcp")
@@ -15,11 +17,11 @@ mcp = FastMCP("ftl-mcp")
 @mcp.tool()
 def get_current_time() -> str:
     """Get the current time in ISO format."""
-    return datetime.now().isoformat()
+    return _get_current_time()
 
 
 @mcp.tool()
-def calculate_speed(distance: float, time: float) -> dict[str, Any]:
+def calculate_speed(distance: float, time: float) -> dict[str, str]:
     """Calculate speed given distance and time.
     
     Args:
@@ -29,23 +31,11 @@ def calculate_speed(distance: float, time: float) -> dict[str, Any]:
     Returns:
         Dictionary with speed calculations
     """
-    if time <= 0:
-        raise ValueError("Time must be greater than zero")
-    
-    speed_kmh = distance / time
-    speed_ms = speed_kmh / 3.6
-    
-    return {
-        "distance_km": distance,
-        "time_hours": time,
-        "speed_kmh": speed_kmh,
-        "speed_ms": speed_ms,
-        "is_faster_than_light": speed_ms > 299792458  # Speed of light in m/s
-    }
+    return _calculate_speed(distance, time)
 
 
 @mcp.tool()
-def list_directory(path: str = ".") -> dict[str, Any]:
+def list_directory(path: str = ".") -> dict[str, str]:
     """List contents of a directory.
     
     Args:
@@ -54,30 +44,7 @@ def list_directory(path: str = ".") -> dict[str, Any]:
     Returns:
         Dictionary with directory information
     """
-    try:
-        dir_path = Path(path)
-        if not dir_path.exists():
-            return {"error": f"Path does not exist: {path}"}
-        
-        if not dir_path.is_dir():
-            return {"error": f"Path is not a directory: {path}"}
-        
-        items = []
-        for item in dir_path.iterdir():
-            items.append({
-                "name": item.name,
-                "type": "directory" if item.is_dir() else "file",
-                "size": item.stat().st_size if item.is_file() else None,
-                "modified": datetime.fromtimestamp(item.stat().st_mtime).isoformat()
-            })
-        
-        return {
-            "path": str(dir_path.absolute()),
-            "item_count": len(items),
-            "items": sorted(items, key=lambda x: x["name"])
-        }
-    except Exception as e:
-        return {"error": str(e)}
+    return _list_directory(path)
 
 
 @mcp.resource("file://{path}")
@@ -90,23 +57,13 @@ def read_file(path: str) -> str:
     Returns:
         File contents as string
     """
-    try:
-        file_path = Path(path)
-        if not file_path.exists():
-            return f"Error: File does not exist: {path}"
-        
-        if not file_path.is_file():
-            return f"Error: Path is not a file: {path}"
-        
-        return file_path.read_text(encoding="utf-8")
-    except Exception as e:
-        return f"Error reading file: {str(e)}"
+    return _read_file(path)
 
 
 @mcp.resource("env://")
 def list_environment_variables() -> dict[str, str]:
     """List all environment variables."""
-    return dict(os.environ)
+    return _list_environment_variables()
 
 
 def main():

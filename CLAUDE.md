@@ -16,6 +16,11 @@ This is an MCP (Model Context Protocol) server repository for faster-than-light 
 
 ## Development Commands
 
+**Important**: Always activate the virtual environment before running any Python commands:
+```bash
+source ~/venv/ftl/bin/activate
+```
+
 ```bash
 # Install dependencies
 pip install -e .
