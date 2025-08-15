@@ -5,9 +5,9 @@ from pathlib import Path
 import yaml
 from fastmcp import Context, FastMCP
 
-from .state import (
+from ftl_mcp.state import (
     InventoryData,
-    InventoryGroup, 
+    InventoryGroup,
     InventoryHost,
     MissionAlert,
     MissionData,
@@ -15,11 +15,11 @@ from .state import (
     SessionData,
     state_manager,
 )
-from .tools import calculate_speed as _calculate_speed
-from .tools import get_current_time as _get_current_time
-from .tools import list_directory as _list_directory
-from .tools import list_environment_variables as _list_environment_variables
-from .tools import read_file as _read_file
+from ftl_mcp.tools import calculate_speed as _calculate_speed
+from ftl_mcp.tools import get_current_time as _get_current_time
+from ftl_mcp.tools import list_directory as _list_directory
+from ftl_mcp.tools import list_environment_variables as _list_environment_variables
+from ftl_mcp.tools import read_file as _read_file
 
 # Create the MCP server
 mcp = FastMCP("ftl-mcp")
@@ -189,7 +189,9 @@ async def update_ftl_mission(
         await ctx.info(f"Mission status updated to: {status}")
 
     if fuel_consumed > 0:
-        current_mission.fuel_level = max(0.0, current_mission.fuel_level - fuel_consumed)
+        current_mission.fuel_level = max(
+            0.0, current_mission.fuel_level - fuel_consumed
+        )
         await ctx.debug(
             f"Fuel consumed: {fuel_consumed}, remaining: {current_mission.fuel_level}"
         )
@@ -207,7 +209,9 @@ async def update_ftl_mission(
 
     # Check for critical conditions
     if current_mission.fuel_level < 20.0:
-        fuel_alert_msg = f"LOW FUEL WARNING: {current_mission.fuel_level:.1f}% remaining"
+        fuel_alert_msg = (
+            f"LOW FUEL WARNING: {current_mission.fuel_level:.1f}% remaining"
+        )
         fuel_alert = MissionAlert(timestamp=_get_current_time(), message=fuel_alert_msg)
         current_mission.alerts.append(fuel_alert)
         await ctx.warning(fuel_alert_msg)
@@ -349,7 +353,7 @@ async def update_session_data(key: str, value: str, ctx: Context) -> dict:
     # Store the data
     old_value = session_data.session_data.get(key)
     session_data.session_data[key] = value
-    
+
     # Save back to state manager
     state_manager.set_session(session_id, session_data)
 
@@ -398,7 +402,7 @@ async def get_session_info(ctx: Context) -> dict:
             request_id=ctx.request_id,
         )
     )
-    
+
     # Save back to state manager
     state_manager.set_session(session_id, session_data)
 
@@ -414,7 +418,9 @@ async def get_session_info(ctx: Context) -> dict:
         "last_activity": session_data.last_activity,
         "session_data_keys": list(session_data.session_data.keys()),
         "session_data": session_data.session_data,
-        "recent_activities": [activity.model_dump() for activity in session_data.activities[-5:]],  # Last 5 activities
+        "recent_activities": [
+            activity.model_dump() for activity in session_data.activities[-5:]
+        ],  # Last 5 activities
         "total_activities": len(session_data.activities),
     }
 
@@ -499,7 +505,7 @@ async def clear_session_data(ctx: Context) -> dict:
             details=f"Cleared {data_count_cleared} data items",
         )
     )
-    
+
     # Save back to state manager
     state_manager.set_session(session_id, session_data)
 
