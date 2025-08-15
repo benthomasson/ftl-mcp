@@ -489,6 +489,8 @@ async def load_inventory(inventory_path: str, ctx: Context) -> dict:
                                     process_group(
                                         child_name, inventory_data[child_name]
                                     )
+                    # Also process 'all' as a regular group to handle direct hosts
+                    process_group("all", value)
             elif isinstance(value, dict) and key not in parsed_inventory["groups"]:
                 # Process top-level groups that weren't already processed as children of 'all'
                 process_group(key, value)
