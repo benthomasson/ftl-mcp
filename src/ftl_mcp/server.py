@@ -18,6 +18,13 @@ from ftl_mcp.tools import get_current_time as _get_current_time
 from ftl_mcp.tools import list_directory as _list_directory
 from ftl_mcp.tools import list_environment_variables as _list_environment_variables
 from ftl_mcp.tools import read_file as _read_file
+from ftl_mcp.ftl_integration import (
+    execute_ansible_module,
+    execute_setup_module,
+    execute_command_module,
+    close_ftl_connections,
+    FTLExecutionError,
+)
 
 # Create the MCP server
 mcp = FastMCP("ftl-mcp")
@@ -784,6 +791,252 @@ async def list_environment_variables(ctx: Context) -> dict:
     except Exception as e:
         await ctx.error(f"Environment variables error: {str(e)}")
         raise
+
+
+# =============================================================================
+# Ansible Module Execution Tools (using faster_than_light)
+# =============================================================================
+
+@mcp.tool()
+async def ansible_module(
+    module_name: str,
+    hosts: str,
+    module_args: dict = None,
+    ctx: Context = None
+) -> dict:
+    """Execute any Ansible module using faster_than_light.
+    
+    Args:
+        module_name: Name of the Ansible module to execute (e.g., "setup", "command", "copy")
+        hosts: Comma-separated list of target hosts or single hostname
+        module_args: Dictionary of arguments to pass to the module
+        
+    Returns:
+        Dictionary with execution results for each host
+    """
+    if not ctx:
+        return {"error": "Context not available"}
+        
+    await ctx.info(f"Client {ctx.client_id or 'Unknown'} executing Ansible module: {module_name}")
+    
+    try:
+        # Parse hosts string into list
+        host_list = [host.strip() for host in hosts.split(",") if host.strip()]
+        
+        if not host_list:
+            await ctx.error("No valid hosts specified")
+            return {"error": "No valid hosts specified"}
+            
+        # Execute module via FTL integration
+        result = await execute_ansible_module(
+            module_name=module_name,
+            hosts=host_list,
+            module_args=module_args or {},
+            ctx=ctx
+        )
+        
+        # Store execution in state manager
+        execution_record = {
+            "module": module_name,
+            "hosts": host_list,
+            "args": module_args or {},
+            "timestamp": _get_current_time(),
+            "summary": result.get("execution_summary", {}),
+            "success": result.get("status") == "success"
+        }
+        state_manager.set_generic(f"ansible_execution_{_get_current_time()}", execution_record)
+        
+        await ctx.info(f"Ansible module '{module_name}' execution completed")
+        return result
+        
+    except FTLExecutionError as e:
+        await ctx.error(f"FTL execution failed: {str(e)}")
+        return {"error": f"Module execution failed: {str(e)}"}
+    except Exception as e:
+        await ctx.error(f"Unexpected error executing module: {str(e)}")
+        return {"error": f"Unexpected error: {str(e)}"}
+
+
+@mcp.tool()
+async def ansible_setup(hosts: str, ctx: Context = None) -> dict:
+    """Gather facts from hosts using the Ansible setup module.
+    
+    Args:
+        hosts: Comma-separated list of target hosts or single hostname
+        
+    Returns:
+        Dictionary with gathered facts for each host
+    """
+    if not ctx:
+        return {"error": "Context not available"}
+        
+    await ctx.info(f"Client {ctx.client_id or 'Unknown'} gathering facts from hosts: {hosts}")
+    
+    try:
+        # Parse hosts string into list
+        host_list = [host.strip() for host in hosts.split(",") if host.strip()]
+        
+        # Execute setup module
+        result = await execute_setup_module(hosts=host_list, ctx=ctx)
+        
+        # Store facts in state manager for later use
+        if result.get("status") == "success":
+            facts_record = {
+                "operation": "gather_facts",
+                "hosts": host_list,
+                "timestamp": _get_current_time(),
+                "facts_summary": {
+                    host: {
+                        "os_family": facts.get("ansible_facts", {}).get("ansible_os_family"),
+                        "distribution": facts.get("ansible_facts", {}).get("ansible_distribution"),
+                        "python_version": facts.get("ansible_facts", {}).get("ansible_python_version")
+                    }
+                    for host, facts in result.get("results", {}).items()
+                    if "ansible_facts" in facts
+                }
+            }
+            state_manager.set_generic(f"facts_{_get_current_time()}", facts_record)
+        
+        await ctx.info(f"Facts gathering completed for {len(host_list)} hosts")
+        return result
+        
+    except Exception as e:
+        await ctx.error(f"Error gathering facts: {str(e)}")
+        return {"error": f"Facts gathering failed: {str(e)}"}
+
+
+@mcp.tool()
+async def ansible_command(command: str, hosts: str, ctx: Context = None) -> dict:
+    """Execute a shell command on hosts using the Ansible command module.
+    
+    Args:
+        command: Shell command to execute
+        hosts: Comma-separated list of target hosts or single hostname
+        
+    Returns:
+        Dictionary with command execution results for each host
+    """
+    if not ctx:
+        return {"error": "Context not available"}
+        
+    await ctx.info(f"Client {ctx.client_id or 'Unknown'} executing command on hosts: {hosts}")
+    await ctx.debug(f"Command: {command}")
+    
+    try:
+        # Parse hosts string into list
+        host_list = [host.strip() for host in hosts.split(",") if host.strip()]
+        
+        # Execute command module
+        result = await execute_command_module(command=command, hosts=host_list, ctx=ctx)
+        
+        # Store command execution record
+        command_record = {
+            "operation": "command_execution",
+            "command": command,
+            "hosts": host_list,
+            "timestamp": _get_current_time(),
+            "summary": result.get("execution_summary", {}),
+            "success": result.get("status") == "success"
+        }
+        state_manager.set_generic(f"command_{_get_current_time()}", command_record)
+        
+        await ctx.info(f"Command execution completed on {len(host_list)} hosts")
+        return result
+        
+    except Exception as e:
+        await ctx.error(f"Error executing command: {str(e)}")
+        return {"error": f"Command execution failed: {str(e)}"}
+
+
+@mcp.tool()
+async def ansible_copy(
+    src: str,
+    dest: str, 
+    hosts: str,
+    backup: bool = False,
+    mode: str = None,
+    ctx: Context = None
+) -> dict:
+    """Copy files to hosts using the Ansible copy module.
+    
+    Args:
+        src: Source file path on the control machine
+        dest: Destination path on target hosts  
+        hosts: Comma-separated list of target hosts or single hostname
+        backup: Create backup of destination file if it exists
+        mode: File permissions for the destination file
+        
+    Returns:
+        Dictionary with copy operation results for each host
+    """
+    if not ctx:
+        return {"error": "Context not available"}
+        
+    await ctx.info(f"Client {ctx.client_id or 'Unknown'} copying file to hosts: {hosts}")
+    await ctx.debug(f"Copy: {src} -> {dest}")
+    
+    try:
+        # Parse hosts string into list
+        host_list = [host.strip() for host in hosts.split(",") if host.strip()]
+        
+        # Prepare copy module arguments
+        copy_args = {
+            "src": src,
+            "dest": dest
+        }
+        if backup:
+            copy_args["backup"] = "yes"
+        if mode:
+            copy_args["mode"] = mode
+            
+        # Execute copy module
+        result = await execute_ansible_module(
+            module_name="copy",
+            hosts=host_list,
+            module_args=copy_args,
+            ctx=ctx
+        )
+        
+        # Store copy operation record
+        copy_record = {
+            "operation": "file_copy", 
+            "src": src,
+            "dest": dest,
+            "hosts": host_list,
+            "timestamp": _get_current_time(),
+            "summary": result.get("execution_summary", {}),
+            "success": result.get("status") == "success"
+        }
+        state_manager.set_generic(f"copy_{_get_current_time()}", copy_record)
+        
+        await ctx.info(f"File copy completed to {len(host_list)} hosts")
+        return result
+        
+    except Exception as e:
+        await ctx.error(f"Error copying file: {str(e)}")
+        return {"error": f"File copy failed: {str(e)}"}
+
+
+@mcp.tool()
+async def close_ansible_connections(ctx: Context = None) -> dict:
+    """Close all faster_than_light connections and clean up resources.
+    
+    Returns:
+        Dictionary with cleanup status
+    """
+    if not ctx:
+        return {"error": "Context not available"}
+        
+    await ctx.info(f"Client {ctx.client_id or 'Unknown'} closing FTL connections")
+    
+    try:
+        await close_ftl_connections(ctx)
+        await ctx.info("FTL connections closed successfully")
+        return {"status": "success", "message": "All FTL connections closed"}
+        
+    except Exception as e:
+        await ctx.error(f"Error closing FTL connections: {str(e)}")
+        return {"error": f"Failed to close connections: {str(e)}"}
 
 
 def main():

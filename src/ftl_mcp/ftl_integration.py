@@ -1,0 +1,241 @@
+"""Integration layer for faster_than_light execution engine.
+
+This module provides the bridge between FTL MCP tools and the faster_than_light
+execution engine, enabling high-performance Ansible module execution through
+MCP interfaces.
+"""
+
+import asyncio
+import tempfile
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Union
+
+import yaml
+import faster_than_light as ftl
+from fastmcp import Context
+
+from .state import state_manager
+
+
+class FTLExecutionError(Exception):
+    """Exception raised when FTL module execution fails."""
+    pass
+
+
+class FTLExecutor:
+    """Manages faster_than_light execution for MCP tools."""
+    
+    def __init__(self):
+        self._gate_cache: Dict[str, Any] = {}
+        
+    async def execute_module(
+        self,
+        module_name: str,
+        hosts: Union[str, List[str]],
+        module_args: Optional[Dict[str, Any]] = None,
+        ctx: Optional[Context] = None
+    ) -> Dict[str, Any]:
+        """Execute an Ansible module using faster_than_light.
+        
+        Args:
+            module_name: Name of the Ansible module to execute
+            hosts: Target host(s) - single hostname or list of hostnames
+            module_args: Arguments to pass to the module
+            ctx: MCP context for logging
+            
+        Returns:
+            Dictionary containing execution results for each host
+            
+        Raises:
+            FTLExecutionError: If module execution fails
+        """
+        if ctx:
+            await ctx.info(f"Executing module '{module_name}' on hosts: {hosts}")
+            
+        # Normalize hosts to list
+        if isinstance(hosts, str):
+            hosts = [hosts]
+            
+        # Prepare module arguments
+        args = module_args or {}
+        
+        try:
+            # Create inventory for target hosts
+            inventory = await self._create_inventory_for_hosts(hosts, ctx)
+            
+            # Execute module via faster_than_light
+            # Use faster_than_light test modules directory
+            module_dirs = ["/Users/ai/git/faster-than-light/tests/modules"]
+            
+            results = await ftl.run_module(
+                inventory=inventory,
+                module_dirs=module_dirs,
+                module_name=module_name,
+                gate_cache=self._gate_cache,
+                module_args=args
+            )
+            
+            if ctx:
+                success_count = sum(1 for result in results.values() 
+                                  if result.get("changed") is not None or result.get("failed") is False)
+                await ctx.info(f"Module execution completed: {success_count}/{len(hosts)} hosts succeeded")
+                
+            return {
+                "status": "success",
+                "module": module_name,
+                "hosts": hosts,
+                "results": results,
+                "execution_summary": self._create_execution_summary(results)
+            }
+            
+        except Exception as e:
+            error_msg = f"FTL module execution failed: {str(e)}"
+            if ctx:
+                await ctx.error(error_msg)
+            raise FTLExecutionError(error_msg) from e
+    
+    async def _create_inventory_for_hosts(
+        self, 
+        hosts: List[str], 
+        ctx: Optional[Context] = None
+    ) -> Dict[str, Any]:
+        """Create an FTL inventory for the specified hosts.
+        
+        This method tries to use the loaded inventory from MCP state first,
+        falling back to creating a basic inventory for the specified hosts.
+        """
+        # Try to get existing inventory from MCP state
+        from .server import _inventory_storage
+        existing_inventory = _inventory_storage.get("ansible_inventory")
+        
+        if existing_inventory and self._hosts_in_inventory(hosts, existing_inventory):
+            if ctx:
+                await ctx.debug("Using existing inventory from MCP state")
+            return self._convert_mcp_inventory_to_ftl(existing_inventory, hosts)
+        
+        # Create basic inventory for the hosts
+        if ctx:
+            await ctx.debug(f"Creating basic inventory for hosts: {hosts}")
+        return self._create_basic_inventory(hosts)
+    
+    def _hosts_in_inventory(self, hosts: List[str], inventory: Dict[str, Any]) -> bool:
+        """Check if all hosts exist in the inventory."""
+        inventory_hosts = inventory.get("hosts", {})
+        return all(host in inventory_hosts for host in hosts)
+    
+    def _convert_mcp_inventory_to_ftl(
+        self, 
+        mcp_inventory: Dict[str, Any], 
+        target_hosts: List[str]
+    ) -> Dict[str, Any]:
+        """Convert MCP inventory format to FTL inventory format.
+        
+        FTL expects Ansible-style inventory structure.
+        """
+        ftl_inventory = {
+            "all": {
+                "hosts": {},
+                "vars": mcp_inventory.get("vars", {})
+            }
+        }
+        
+        # Add target hosts with their variables
+        for host_name in target_hosts:
+            if host_name in mcp_inventory.get("hosts", {}):
+                host_data = mcp_inventory["hosts"][host_name]
+                ftl_inventory["all"]["hosts"][host_name] = host_data.get("vars", {})
+            else:
+                # Basic host entry if not in inventory
+                ftl_inventory["all"]["hosts"][host_name] = {}
+                
+        return ftl_inventory
+    
+    def _create_basic_inventory(self, hosts: List[str]) -> Dict[str, Any]:
+        """Create a basic FTL inventory for the specified hosts."""
+        inventory = {
+            "all": {
+                "hosts": {},
+                "vars": {
+                    "ansible_ssh_common_args": "-o StrictHostKeyChecking=no"
+                }
+            }
+        }
+        
+        for host in hosts:
+            if host == "localhost":
+                inventory["all"]["hosts"][host] = {
+                    "ansible_connection": "local",
+                    "ansible_python_interpreter": "/usr/bin/python3"
+                }
+            else:
+                inventory["all"]["hosts"][host] = {}
+                
+        return inventory
+    
+    def _create_execution_summary(self, results: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a summary of execution results."""
+        total_hosts = len(results)
+        successful = sum(1 for result in results.values() 
+                        if not result.get("failed", False))
+        failed = total_hosts - successful
+        changed = sum(1 for result in results.values() 
+                     if result.get("changed", False))
+        
+        return {
+            "total_hosts": total_hosts,
+            "successful": successful,
+            "failed": failed,
+            "changed": changed,
+            "success_rate": f"{(successful/total_hosts)*100:.1f}%" if total_hosts > 0 else "0%"
+        }
+    
+    async def close_connections(self, ctx: Optional[Context] = None):
+        """Close all FTL connections and clean up resources."""
+        try:
+            await ftl.close_gate()
+            self._gate_cache.clear()
+            if ctx:
+                await ctx.debug("FTL connections closed and cache cleared")
+        except Exception as e:
+            if ctx:
+                await ctx.warning(f"Error closing FTL connections: {str(e)}")
+
+
+# Global FTL executor instance
+ftl_executor = FTLExecutor()
+
+
+# Convenience functions for common operations
+async def execute_ansible_module(
+    module_name: str,
+    hosts: Union[str, List[str]], 
+    module_args: Optional[Dict[str, Any]] = None,
+    ctx: Optional[Context] = None
+) -> Dict[str, Any]:
+    """Execute an Ansible module using FTL.
+    
+    This is the main entry point for executing Ansible modules from MCP tools.
+    """
+    return await ftl_executor.execute_module(module_name, hosts, module_args, ctx)
+
+
+async def execute_setup_module(
+    hosts: Union[str, List[str]],
+    ctx: Optional[Context] = None
+) -> Dict[str, Any]:
+    """Execute the setup module to gather facts."""
+    return await execute_ansible_module("setup", hosts, {}, ctx)
+
+
+async def execute_command_module(
+    command: str,
+    hosts: Union[str, List[str]],
+    ctx: Optional[Context] = None
+) -> Dict[str, Any]:
+    """Execute a shell command on hosts."""
+    return await execute_ansible_module("command", hosts, {"cmd": command}, ctx)
+
+
+async def close_ftl_connections(ctx: Optional[Context] = None):
+    """Close all FTL connections."""
+    await ftl_executor.close_connections(ctx)

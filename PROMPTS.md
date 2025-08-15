@@ -152,6 +152,12 @@ This document contains the chronological list of prompts that were used to build
 
 *Created comprehensive integration tests for MCP server tools using FastMCP Client pattern. Added test_server_integration.py with 4 tests: test_load_inventory_with_localhost (verifies localhost loading and details), test_load_inventory_localhost_in_all_group (checks group associations), test_inventory_state_persistence (tests tool interaction flow), and test_load_inventory_file_not_found (error handling). Fixed bug in load_inventory function where 'all' group hosts weren't being processed - added process_group("all", value) to handle direct hosts under 'all' group. All 44 tests pass including the new integration tests that successfully load inventory.yml and verify localhost is present with correct ansible_connection=local configuration.*
 
+## 26. Add faster_than_light Dependency
+
+**Prompt:** "Add faster_than_light as a dependency for this project."
+
+*Added faster_than_light to the dependencies list in pyproject.toml. The package is now included alongside the existing dependencies (mcp, pydantic, anyio, fastmcp, PyYAML) and will be installed when the project is installed.*
+
 ---
 
 ## Project Evolution Summary

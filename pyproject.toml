@@ -29,6 +29,7 @@ dependencies = [
     "anyio>=3.0.0",
     "fastmcp>=0.1.0",
     "PyYAML>=6.0.0",
+    "faster_than_light",
 ]
 
 [project.optional-dependencies]
