@@ -56,24 +56,6 @@ class InventoryData(BaseModel):
     vars: Dict[str, Any]
 
 
-class MissionAlert(BaseModel):
-    """Model for FTL mission alerts."""
-
-    timestamp: str
-    message: str
-
-
-class MissionData(BaseModel):
-    """Model for FTL mission data."""
-
-    name: str
-    destination: str
-    status: str
-    start_time: str
-    fuel_level: float
-    crew_count: int
-    distance_traveled: float
-    alerts: List[MissionAlert]
 
 
 class StateManager:
@@ -87,10 +69,6 @@ class StateManager:
         self._inventory: Optional[InventoryData] = None
         self._inventory_history: List[str] = []
 
-        # Mission storage
-        self._current_mission: Optional[MissionData] = None
-        self._mission_history: List[str] = []
-        self._last_completed_mission: Optional[Dict[str, Any]] = None
 
         # Generic storage for any other data
         self._generic_storage: Dict[str, Any] = {}
@@ -137,30 +115,6 @@ class StateManager:
         self._inventory = None
         self._inventory_history = []
 
-    # Mission management methods
-    def set_current_mission(self, data: Optional[MissionData]) -> None:
-        """Store current mission data."""
-        self._current_mission = data
-
-    def get_current_mission(self) -> Optional[MissionData]:
-        """Retrieve current mission data."""
-        return self._current_mission
-
-    def set_mission_history(self, history: List[str]) -> None:
-        """Set mission history."""
-        self._mission_history = history.copy()
-
-    def get_mission_history(self) -> List[str]:
-        """Get mission history."""
-        return self._mission_history.copy()
-
-    def set_last_completed_mission(self, data: Optional[Dict[str, Any]]) -> None:
-        """Store last completed mission."""
-        self._last_completed_mission = data
-
-    def get_last_completed_mission(self) -> Optional[Dict[str, Any]]:
-        """Get last completed mission."""
-        return self._last_completed_mission
 
     # Generic storage methods
     def set_generic(self, key: str, value: Any) -> None:
@@ -184,12 +138,10 @@ class StateManager:
         return {
             "active_sessions": len(self._sessions),
             "inventory_loaded": self._inventory is not None,
-            "active_mission": self._current_mission is not None,
             "generic_items": len(self._generic_storage),
             "total_memory_items": (
                 len(self._sessions)
                 + (1 if self._inventory else 0)
-                + (1 if self._current_mission else 0)
                 + len(self._generic_storage)
             ),
         }
@@ -202,8 +154,6 @@ class StateManager:
             )
         elif section == "inventory" and self._inventory:
             return self._inventory.model_dump_json(indent=2)
-        elif section == "mission" and self._current_mission:
-            return self._current_mission.model_dump_json(indent=2)
         elif section == "generic":
             return json.dumps(self._generic_storage, indent=2)
         else:
@@ -215,13 +165,6 @@ class StateManager:
                         self._inventory.model_dump() if self._inventory else None
                     ),
                     "inventory_history": self._inventory_history,
-                    "current_mission": (
-                        self._current_mission.model_dump()
-                        if self._current_mission
-                        else None
-                    ),
-                    "mission_history": self._mission_history,
-                    "last_completed_mission": self._last_completed_mission,
                     "generic_storage": self._generic_storage,
                     "stats": self.get_stats(),
                 },
@@ -233,9 +176,6 @@ class StateManager:
         self._sessions.clear()
         self._inventory = None
         self._inventory_history = []
-        self._current_mission = None
-        self._mission_history = []
-        self._last_completed_mission = None
         self._generic_storage.clear()
 
 

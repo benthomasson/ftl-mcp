@@ -20,11 +20,6 @@ An MCP (Model Context Protocol) server for faster-than-light automation, built w
 - **list_active_sessions()** - List all active sessions being tracked
 - **clear_session_data()** - Clear session data while preserving session metadata
 
-#### FTL Mission Control (State Management Examples)
-- **start_ftl_mission(mission_name, destination)** - Start a mission with state tracking
-- **update_ftl_mission(status, fuel_consumed, distance, alert)** - Update mission state
-- **get_ftl_mission_status()** - Get current mission status from state
-- **complete_ftl_mission()** - Complete and clear mission from state
 
 #### Ansible Inventory Management
 - **load_inventory(inventory_path)** - Load Ansible YAML inventory into context state

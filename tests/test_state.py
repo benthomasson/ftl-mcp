@@ -12,8 +12,6 @@ from src.ftl_mcp.state import (
     InventoryData,
     InventoryHost,
     InventoryGroup,
-    MissionData,
-    MissionAlert,
     state_manager,
 )
 
@@ -128,40 +126,7 @@ class TestPydanticModels:
         assert "webservers" in inventory.groups
         assert "web01.example.com" in inventory.hosts
 
-    def test_mission_alert_creation(self):
-        """Test MissionAlert model creation."""
-        alert = MissionAlert(
-            timestamp="2025-08-15T12:00:00",
-            message="Low fuel warning"
-        )
-        
-        assert alert.timestamp == "2025-08-15T12:00:00"
-        assert alert.message == "Low fuel warning"
 
-    def test_mission_data_creation(self):
-        """Test MissionData model creation."""
-        alerts = [
-            MissionAlert(
-                timestamp="2025-08-15T12:00:00",
-                message="Mission started"
-            )
-        ]
-        
-        mission = MissionData(
-            name="Test Mission",
-            destination="Alpha Centauri",
-            status="planning",
-            start_time="2025-08-15T12:00:00",
-            fuel_level=100.0,
-            crew_count=5,
-            distance_traveled=0.0,
-            alerts=alerts
-        )
-        
-        assert mission.name == "Test Mission"
-        assert mission.destination == "Alpha Centauri"
-        assert mission.fuel_level == 100.0
-        assert len(mission.alerts) == 1
 
     def test_model_serialization(self):
         """Test Pydantic model JSON serialization."""
@@ -206,12 +171,10 @@ class TestStateManager:
         """Test StateManager initializes with empty state."""
         assert len(self.state_manager.list_sessions()) == 0
         assert self.state_manager.get_inventory() is None
-        assert self.state_manager.get_current_mission() is None
         
         stats = self.state_manager.get_stats()
         assert stats["active_sessions"] == 0
         assert stats["inventory_loaded"] is False
-        assert stats["active_mission"] is False
 
     def test_session_management(self):
         """Test session storage and retrieval."""
@@ -341,71 +304,7 @@ class TestStateManager:
         assert self.state_manager.get_inventory() is None
         assert len(self.state_manager.get_inventory_history()) == 0
 
-    def test_mission_management(self):
-        """Test mission storage and retrieval."""
-        # Create mission data
-        alerts = [
-            MissionAlert(
-                timestamp="2025-08-15T12:00:00",
-                message="Mission started"
-            )
-        ]
-        
-        mission = MissionData(
-            name="Test Mission",
-            destination="Alpha Centauri",
-            status="planning",
-            start_time="2025-08-15T12:00:00",
-            fuel_level=100.0,
-            crew_count=5,
-            distance_traveled=0.0,
-            alerts=alerts
-        )
-        
-        # Store mission
-        self.state_manager.set_current_mission(mission)
-        self.state_manager.set_mission_history(["Mission 1", "Mission 2"])
-        
-        # Retrieve mission
-        retrieved = self.state_manager.get_current_mission()
-        assert retrieved is not None
-        assert retrieved.name == "Test Mission"
-        assert retrieved.fuel_level == 100.0
-        assert len(retrieved.alerts) == 1
-        
-        # Test history
-        history = self.state_manager.get_mission_history()
-        assert len(history) == 2
-        assert "Mission 1" in history
 
-    def test_mission_completion(self):
-        """Test mission completion workflow."""
-        mission = MissionData(
-            name="Test Mission",
-            destination="Alpha Centauri",
-            status="active",
-            start_time="2025-08-15T12:00:00",
-            fuel_level=50.0,
-            crew_count=5,
-            distance_traveled=100.0,
-            alerts=[]
-        )
-        
-        self.state_manager.set_current_mission(mission)
-        
-        # Complete mission
-        completion_data = {
-            "mission_name": "Test Mission",
-            "total_distance": 100.0,
-            "final_fuel": 50.0
-        }
-        
-        self.state_manager.set_last_completed_mission(completion_data)
-        self.state_manager.set_current_mission(None)
-        
-        assert self.state_manager.get_current_mission() is None
-        retrieved_completion = self.state_manager.get_last_completed_mission()
-        assert retrieved_completion["mission_name"] == "Test Mission"
 
     def test_generic_storage(self):
         """Test generic key-value storage."""
@@ -441,7 +340,6 @@ class TestStateManager:
         stats = self.state_manager.get_stats()
         assert stats["active_sessions"] == 0
         assert stats["inventory_loaded"] is False
-        assert stats["active_mission"] is False
         assert stats["generic_items"] == 0
         assert stats["total_memory_items"] == 0
         
@@ -476,7 +374,6 @@ class TestStateManager:
         stats = self.state_manager.get_stats()
         assert stats["active_sessions"] == 1
         assert stats["inventory_loaded"] is True
-        assert stats["active_mission"] is False
         assert stats["generic_items"] == 2
         assert stats["total_memory_items"] == 4  # 1 session + 1 inventory + 2 generic
 
@@ -555,7 +452,6 @@ class TestStateManager:
         # Verify all data is cleared
         assert len(self.state_manager.list_sessions()) == 0
         assert self.state_manager.get_inventory() is None
-        assert self.state_manager.get_current_mission() is None
         assert self.state_manager.get_generic("test") is None
         
         stats = self.state_manager.get_stats()
@@ -646,18 +542,6 @@ class TestStateManagerIntegration:
             session_data={"key": "value"}
         )
         
-        # Create mission
-        mission = MissionData(
-            name="Concurrent Mission",
-            destination="Test System",
-            status="active",
-            start_time="2025-08-15T12:00:00",
-            fuel_level=75.0,
-            crew_count=5,
-            distance_traveled=50.0,
-            alerts=[]
-        )
-        
         # Create inventory
         inventory = InventoryData(
             source_file="/concurrent.yml",
@@ -676,13 +560,11 @@ class TestStateManagerIntegration:
         
         # Store all data
         self.state_manager.set_session("concurrent_session", session)
-        self.state_manager.set_current_mission(mission)
         self.state_manager.set_inventory(inventory)
         self.state_manager.set_generic("config", {"setting": "value"})
         
         # Verify all data coexists
         assert self.state_manager.get_session("concurrent_session") is not None
-        assert self.state_manager.get_current_mission() is not None
         assert self.state_manager.get_inventory() is not None
         assert self.state_manager.get_generic("config") is not None
         
@@ -690,53 +572,15 @@ class TestStateManagerIntegration:
         stats = self.state_manager.get_stats()
         assert stats["active_sessions"] == 1
         assert stats["inventory_loaded"] is True
-        assert stats["active_mission"] is True
         assert stats["generic_items"] == 1
-        assert stats["total_memory_items"] == 4
+        assert stats["total_memory_items"] == 3
 
-    def test_data_persistence_and_modification(self):
-        """Test data persistence and modification over time."""
-        # Create initial mission
-        mission = MissionData(
-            name="Persistence Test",
-            destination="Test System",
-            status="planning",
-            start_time="2025-08-15T12:00:00",
-            fuel_level=100.0,
-            crew_count=5,
-            distance_traveled=0.0,
-            alerts=[]
-        )
-        
-        self.state_manager.set_current_mission(mission)
-        
-        # Modify mission - simulate mission progress
-        mission.status = "active"
-        mission.fuel_level = 80.0
-        mission.distance_traveled = 25.0
-        mission.alerts.append(
-            MissionAlert(
-                timestamp="2025-08-15T13:00:00",
-                message="Course correction completed"
-            )
-        )
-        
-        self.state_manager.set_current_mission(mission)
-        
-        # Verify persistence of changes
-        retrieved = self.state_manager.get_current_mission()
-        assert retrieved.status == "active"
-        assert retrieved.fuel_level == 80.0
-        assert retrieved.distance_traveled == 25.0
-        assert len(retrieved.alerts) == 1
-        assert retrieved.alerts[0].message == "Course correction completed"
 
     def test_error_handling_and_edge_cases(self):
         """Test error handling and edge cases."""
         # Test retrieving non-existent data
         assert self.state_manager.get_session("nonexistent") is None
         assert self.state_manager.get_inventory() is None
-        assert self.state_manager.get_current_mission() is None
         assert self.state_manager.get_generic("nonexistent") is None
         
         # Test deleting non-existent data
@@ -746,11 +590,9 @@ class TestStateManagerIntegration:
         # Test empty collections
         assert len(self.state_manager.list_sessions()) == 0
         assert len(self.state_manager.get_inventory_history()) == 0
-        assert len(self.state_manager.get_mission_history()) == 0
         
         # Test stats with empty state
         stats = self.state_manager.get_stats()
         for key in ["active_sessions", "generic_items", "total_memory_items"]:
             assert stats[key] == 0
-        for key in ["inventory_loaded", "active_mission"]:
-            assert stats[key] is False
+        assert stats["inventory_loaded"] is False

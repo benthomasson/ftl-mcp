@@ -9,8 +9,6 @@ from ftl_mcp.state import (
     InventoryData,
     InventoryGroup,
     InventoryHost,
-    MissionAlert,
-    MissionData,
     SessionActivity,
     SessionData,
     state_manager,
@@ -116,143 +114,10 @@ async def get_context_info(ctx: Context) -> dict:
     return context_info
 
 
-@mcp.tool()
-async def start_ftl_mission(mission_name: str, destination: str, ctx: Context) -> dict:
-    """Start a faster-than-light mission and store it in context state.
-
-    Args:
-        mission_name: Name of the FTL mission
-        destination: Destination system/planet
-
-    Returns:
-        Dictionary with mission details
-    """
-    await ctx.info(
-        f"Client {ctx.client_id or 'Unknown'} starting FTL mission: {mission_name}"
-    )
-
-    # Initialize mission state using Pydantic model
-    mission_data = MissionData(
-        name=mission_name,
-        destination=destination,
-        status="planning",
-        start_time=_get_current_time(),
-        fuel_level=100.0,
-        crew_count=5,
-        distance_traveled=0.0,
-        alerts=[],
-    )
-
-    # Store in state manager
-    state_manager.set_current_mission(mission_data)
-    state_manager.set_mission_history([mission_name])
-
-    await ctx.info(f"Mission '{mission_name}' initialized in state manager")
-    return mission_data.model_dump()
 
 
-@mcp.tool()
-async def update_ftl_mission(
-    status: str = None,
-    fuel_consumed: float = 0.0,
-    distance: float = 0.0,
-    alert: str = None,
-    ctx: Context = None,
-) -> dict:
-    """Update the current FTL mission status using context state.
-
-    Args:
-        status: New mission status (optional)
-        fuel_consumed: Amount of fuel consumed (default: 0.0)
-        distance: Distance traveled in light-years (default: 0.0)
-        alert: Alert message to add (optional)
-
-    Returns:
-        Dictionary with updated mission details
-    """
-    if not ctx:
-        return {"error": "Context not available"}
-
-    await ctx.info(f"Client {ctx.client_id or 'Unknown'} updating FTL mission")
-
-    # Retrieve current mission from state manager
-    current_mission = state_manager.get_current_mission()
-    if not current_mission:
-        await ctx.warning("No active mission found in state manager")
-        return {
-            "error": "No active mission. Start a mission first using start_ftl_mission."
-        }
-
-    # Update mission data
-    if status:
-        current_mission.status = status
-        await ctx.info(f"Mission status updated to: {status}")
-
-    if fuel_consumed > 0:
-        current_mission.fuel_level = max(
-            0.0, current_mission.fuel_level - fuel_consumed
-        )
-        await ctx.debug(
-            f"Fuel consumed: {fuel_consumed}, remaining: {current_mission.fuel_level}"
-        )
-
-    if distance > 0:
-        current_mission.distance_traveled += distance
-        await ctx.debug(
-            f"Distance traveled: +{distance}, total: {current_mission.distance_traveled}"
-        )
-
-    if alert:
-        mission_alert = MissionAlert(timestamp=_get_current_time(), message=alert)
-        current_mission.alerts.append(mission_alert)
-        await ctx.warning(f"Mission alert: {alert}")
-
-    # Check for critical conditions
-    if current_mission.fuel_level < 20.0:
-        fuel_alert_msg = (
-            f"LOW FUEL WARNING: {current_mission.fuel_level:.1f}% remaining"
-        )
-        fuel_alert = MissionAlert(timestamp=_get_current_time(), message=fuel_alert_msg)
-        current_mission.alerts.append(fuel_alert)
-        await ctx.warning(fuel_alert_msg)
-
-    # Update state manager
-    state_manager.set_current_mission(current_mission)
-
-    return current_mission.model_dump()
 
 
-@mcp.tool()
-async def get_ftl_mission_status(ctx: Context) -> dict:
-    """Get the current FTL mission status from context state.
-
-    Returns:
-        Dictionary with current mission status
-    """
-    await ctx.info(f"Client {ctx.client_id or 'Unknown'} requesting mission status")
-
-    # Retrieve mission from state manager
-    current_mission = state_manager.get_current_mission()
-    mission_history = state_manager.get_mission_history()
-
-    if not current_mission:
-        await ctx.debug("No active mission in state manager")
-        return {
-            "active_mission": None,
-            "mission_history": mission_history,
-            "message": "No active mission",
-        }
-
-    await ctx.debug(f"Retrieved mission: {current_mission.name}")
-
-    return {
-        "active_mission": current_mission.model_dump(),
-        "mission_history": mission_history,
-        "state_info": {
-            "context_id": ctx.request_id,
-            "client_id": ctx.client_id or "Unknown",
-        },
-    }
 
 
 @mcp.tool()
@@ -523,40 +388,6 @@ async def clear_session_data(ctx: Context) -> dict:
     }
 
 
-@mcp.tool()
-async def complete_ftl_mission(ctx: Context) -> dict:
-    """Complete the current FTL mission and clear it from context state.
-
-    Returns:
-        Dictionary with completion summary
-    """
-    await ctx.info(f"Client {ctx.client_id or 'Unknown'} completing FTL mission")
-
-    # Retrieve current mission
-    current_mission = state_manager.get_current_mission()
-    if not current_mission:
-        await ctx.warning("No active mission to complete")
-        return {"error": "No active mission to complete"}
-
-    # Create completion summary
-    completion_summary = {
-        "mission_name": current_mission.name,
-        "destination": current_mission.destination,
-        "completion_time": _get_current_time(),
-        "total_distance": current_mission.distance_traveled,
-        "final_fuel_level": current_mission.fuel_level,
-        "total_alerts": len(current_mission.alerts),
-        "mission_duration": "Calculated from start_time",  # Could calculate actual duration
-        "status": "completed",
-    }
-
-    # Clear current mission from state but keep history
-    state_manager.set_current_mission(None)
-    state_manager.set_last_completed_mission(completion_summary)
-
-    await ctx.info(f"Mission '{current_mission.name}' completed successfully")
-
-    return completion_summary
 
 
 @mcp.tool()
