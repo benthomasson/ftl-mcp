@@ -15,11 +15,59 @@ import faster_than_light as ftl
 from fastmcp import Context
 
 from .state import state_manager
+from .tools import get_current_time as _get_current_time
 
 
 class FTLExecutionError(Exception):
     """Exception raised when FTL module execution fails."""
     pass
+
+
+class TaskLogger:
+    """Logs Ansible module executions for playbook generation."""
+    
+    def __init__(self):
+        self.tasks = []
+    
+    def log_task(self, module_name: str, hosts: List[str], args: dict, result: dict):
+        """Log an executed task for playbook generation.
+        
+        Args:
+            module_name: Name of the Ansible module executed
+            hosts: List of target hosts
+            args: Module arguments used
+            result: Execution result from faster_than_light
+        """
+        task = {
+            "name": f"Execute {module_name}",
+            "module": module_name,
+            "hosts": hosts,
+            "args": args,
+            "timestamp": _get_current_time(),
+            "success": result.get("status") == "success",
+            "changed": any(r.get("changed", False) for r in result.get("results", {}).values()) if result.get("results") else False
+        }
+        self.tasks.append(task)
+        
+        # Store in state manager for persistence
+        state_manager.set_generic("playbook_tasks", self.tasks)
+    
+    def get_tasks(self) -> List[dict]:
+        """Get all logged tasks."""
+        # Load from state manager in case it was updated elsewhere
+        stored_tasks = state_manager.get_generic("playbook_tasks")
+        if stored_tasks:
+            self.tasks = stored_tasks
+        return self.tasks
+    
+    def clear_tasks(self):
+        """Clear all logged tasks."""
+        self.tasks = []
+        state_manager.set_generic("playbook_tasks", [])
+
+
+# Global task logger instance
+task_logger = TaskLogger()
 
 
 class FTLExecutor:
@@ -216,7 +264,13 @@ async def execute_ansible_module(
     
     This is the main entry point for executing Ansible modules from MCP tools.
     """
-    return await ftl_executor.execute_module(module_name, hosts, module_args, ctx)
+    result = await ftl_executor.execute_module(module_name, hosts, module_args, ctx)
+    
+    # Log the task for playbook generation
+    host_list = hosts if isinstance(hosts, list) else [hosts]
+    task_logger.log_task(module_name, host_list, module_args or {}, result)
+    
+    return result
 
 
 async def execute_setup_module(

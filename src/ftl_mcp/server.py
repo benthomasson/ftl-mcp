@@ -24,6 +24,7 @@ from ftl_mcp.ftl_integration import (
     execute_command_module,
     close_ftl_connections,
     FTLExecutionError,
+    task_logger,
 )
 
 # Create the MCP server
@@ -1037,6 +1038,180 @@ async def close_ansible_connections(ctx: Context = None) -> dict:
     except Exception as e:
         await ctx.error(f"Error closing FTL connections: {str(e)}")
         return {"error": f"Failed to close connections: {str(e)}"}
+
+
+# =============================================================================
+# Playbook Generation Tools
+# =============================================================================
+
+@mcp.tool()
+async def get_playbook_tasks(ctx: Context = None) -> dict:
+    """Get recorded tasks that can be converted to an Ansible playbook.
+    
+    Returns:
+        Dictionary with recorded tasks and metadata
+    """
+    if not ctx:
+        return {"error": "Context not available"}
+        
+    await ctx.info(f"Client {ctx.client_id or 'Unknown'} requesting playbook tasks")
+    
+    try:
+        tasks = task_logger.get_tasks()
+        
+        # Calculate summary statistics
+        total_tasks = len(tasks)
+        successful_tasks = sum(1 for t in tasks if t.get("success", False))
+        changed_tasks = sum(1 for t in tasks if t.get("changed", False))
+        unique_hosts = set()
+        unique_modules = set()
+        
+        for task in tasks:
+            unique_hosts.update(task.get("hosts", []))
+            unique_modules.add(task.get("module", ""))
+        
+        await ctx.info(f"Retrieved {total_tasks} recorded tasks")
+        
+        return {
+            "tasks": tasks,
+            "summary": {
+                "total_tasks": total_tasks,
+                "successful_tasks": successful_tasks,
+                "failed_tasks": total_tasks - successful_tasks,
+                "changed_tasks": changed_tasks,
+                "unique_hosts": list(unique_hosts),
+                "unique_modules": list(unique_modules),
+                "host_count": len(unique_hosts),
+                "module_count": len(unique_modules)
+            }
+        }
+        
+    except Exception as e:
+        await ctx.error(f"Error retrieving playbook tasks: {str(e)}")
+        return {"error": f"Failed to retrieve tasks: {str(e)}"}
+
+
+@mcp.tool()
+async def generate_playbook(
+    playbook_name: str = "generated_playbook",
+    include_failed: bool = False,
+    ctx: Context = None
+) -> dict:
+    """Generate an Ansible playbook from recorded tasks.
+    
+    Args:
+        playbook_name: Name for the generated playbook
+        include_failed: Whether to include tasks that failed during execution
+        
+    Returns:
+        Dictionary with generated playbook data and YAML
+    """
+    if not ctx:
+        return {"error": "Context not available"}
+        
+    await ctx.info(f"Client {ctx.client_id or 'Unknown'} generating playbook: {playbook_name}")
+    
+    try:
+        tasks = task_logger.get_tasks()
+        
+        # Filter tasks based on success
+        if not include_failed:
+            original_count = len(tasks)
+            tasks = [t for t in tasks if t.get("success", False)]
+            filtered_count = len(tasks)
+            if original_count > filtered_count:
+                await ctx.info(f"Filtered out {original_count - filtered_count} failed tasks")
+        
+        if not tasks:
+            await ctx.warning("No tasks available for playbook generation")
+            return {"error": "No tasks recorded or all tasks failed"}
+        
+        # Determine if we need to gather facts
+        gather_facts = any(t["module"] == "setup" for t in tasks)
+        
+        # Get all unique hosts from tasks
+        all_hosts = set()
+        for task in tasks:
+            all_hosts.update(task.get("hosts", []))
+        
+        # Generate playbook structure
+        playbook = {
+            "name": playbook_name,
+            "hosts": "{{ target_hosts | default('all') }}",
+            "gather_facts": gather_facts,
+            "tasks": []
+        }
+        
+        # Convert tasks to playbook format
+        for task in tasks:
+            playbook_task = {
+                "name": task["name"]
+            }
+            
+            # Add the module and its arguments
+            module_name = task["module"]
+            module_args = task["args"]
+            
+            if module_args:
+                playbook_task[module_name] = module_args
+            else:
+                playbook_task[module_name] = {}
+            
+            playbook["tasks"].append(playbook_task)
+        
+        # Generate YAML representation
+        playbook_yaml = yaml.dump([playbook], default_flow_style=False, sort_keys=False)
+        
+        await ctx.info(f"Generated playbook with {len(tasks)} tasks targeting {len(all_hosts)} hosts")
+        
+        return {
+            "status": "success",
+            "playbook_name": playbook_name,
+            "playbook": playbook,
+            "yaml": playbook_yaml,
+            "metadata": {
+                "task_count": len(tasks),
+                "host_count": len(all_hosts),
+                "hosts": list(all_hosts),
+                "modules_used": list(set(t["module"] for t in tasks)),
+                "gather_facts": gather_facts,
+                "generated_at": _get_current_time()
+            }
+        }
+        
+    except Exception as e:
+        await ctx.error(f"Error generating playbook: {str(e)}")
+        return {"error": f"Failed to generate playbook: {str(e)}"}
+
+
+@mcp.tool()
+async def clear_playbook_tasks(ctx: Context = None) -> dict:
+    """Clear the recorded task history.
+    
+    Returns:
+        Dictionary with clear operation status
+    """
+    if not ctx:
+        return {"error": "Context not available"}
+        
+    await ctx.info(f"Client {ctx.client_id or 'Unknown'} clearing playbook task history")
+    
+    try:
+        tasks_before = len(task_logger.get_tasks())
+        task_logger.clear_tasks()
+        
+        await ctx.info(f"Cleared {tasks_before} recorded tasks")
+        
+        return {
+            "status": "success",
+            "message": f"Cleared {tasks_before} recorded tasks",
+            "tasks_cleared": tasks_before,
+            "cleared_at": _get_current_time()
+        }
+        
+    except Exception as e:
+        await ctx.error(f"Error clearing playbook tasks: {str(e)}")
+        return {"error": f"Failed to clear tasks: {str(e)}"}
 
 
 def main():
