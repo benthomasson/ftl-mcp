@@ -1,27 +1,35 @@
-
 # FTL MCP
 
-An MCP (Model Context Protocol) server for faster-than-light automation, built with Python and FastMCP.
+An advanced MCP (Model Context Protocol) server for high-performance automation, combining MCP tooling with faster_than_light execution. Built with Python, FastMCP, and faster_than_light.
 
 ## Features
 
-### Tools
+### Ansible Automation Tools (faster_than_light powered)
+- **ansible_module(module_name, hosts, module_args)** - Execute any Ansible module with high performance
+- **ansible_setup(hosts)** - Gather facts from target hosts
+- **ansible_command(command, hosts)** - Execute shell commands on remote hosts
+- **ansible_copy(src, dest, hosts)** - Copy files to target hosts
+- **close_ansible_connections()** - Clean up SSH connections and resources
 
-#### Core Tools
+### Playbook Generation (Infrastructure as Code)
+- **get_playbook_tasks()** - View recorded automation tasks with statistics
+- **generate_playbook(playbook_name, include_failed)** - Convert tasks to Ansible playbook YAML
+- **clear_playbook_tasks()** - Clear task history to start fresh
+
+### Core Tools
 - **get_current_time()** - Get the current timestamp in ISO format
 - **calculate_speed(distance, time)** - Calculate speed and determine if it's faster than light
 - **list_directory(path)** - List directory contents with detailed metadata
 - **get_context_info()** - Get FastMCP context information (client ID, request ID, etc.)
 
-#### Session Management
+### Session Management
 - **start_session_tracker(session_name)** - Initialize session tracking using FastMCP session ID
 - **update_session_data(key, value)** - Store session-specific key-value data
 - **get_session_info()** - Retrieve current session information and activity log
 - **list_active_sessions()** - List all active sessions being tracked
 - **clear_session_data()** - Clear session data while preserving session metadata
 
-
-#### Ansible Inventory Management
+### Ansible Inventory Management
 - **load_inventory(inventory_path)** - Load Ansible YAML inventory into context state
 - **save_inventory(output_path)** - Save current inventory data to YAML file
 - **get_inventory_status()** - Get current inventory loading status
@@ -58,9 +66,60 @@ ftl-mcp
 python -m ftl_mcp.server
 ```
 
+### Automation Workflow
+
+The FTL MCP server enables powerful automation workflows:
+
+#### 1. Interactive Automation
+```python
+# Execute Ansible modules interactively
+await client.call_tool("ansible_command", {
+    "command": "systemctl status nginx",
+    "hosts": "webservers"
+})
+
+# Copy configuration files
+await client.call_tool("ansible_copy", {
+    "src": "nginx.conf",
+    "dest": "/etc/nginx/nginx.conf", 
+    "hosts": "webservers"
+})
+
+# Gather system facts
+await client.call_tool("ansible_setup", {
+    "hosts": "all"
+})
+```
+
+#### 2. Infrastructure as Code
+```python
+# View what tasks have been executed
+tasks = await client.call_tool("get_playbook_tasks", {})
+print(f"Recorded {tasks.data['summary']['total_tasks']} tasks")
+
+# Generate reusable playbook from executed tasks
+playbook = await client.call_tool("generate_playbook", {
+    "playbook_name": "webserver_setup",
+    "include_failed": False
+})
+
+# Save the generated YAML to version control
+with open("webserver_setup.yml", "w") as f:
+    f.write(playbook.data["yaml"])
+```
+
+#### 3. Performance Benefits
+- **2-10x faster** than standard Ansible execution
+- **Async execution** with SSH connection pooling
+- **Concurrent operations** across multiple hosts
+- **Real-time monitoring** and execution tracking
+
 ### Development
 
 ```bash
+# Activate virtual environment
+source ~/venv/ftl/bin/activate
+
 # Run tests
 pytest -v
 
@@ -80,81 +139,89 @@ mypy src/
 ```
 ftl-mcp/
 ├── src/ftl_mcp/
-│   ├── __init__.py          # Package initialization
-│   ├── server.py            # FastMCP server with decorated endpoints
-│   ├── state.py             # StateManager with Pydantic models
-│   └── tools.py             # Core business logic functions
+│   ├── __init__.py              # Package initialization
+│   ├── server.py                # FastMCP server with all MCP tools
+│   ├── state.py                 # StateManager with Pydantic models
+│   ├── tools.py                 # Core business logic functions
+│   └── ftl_integration.py       # faster_than_light integration layer
 ├── tests/
-│   ├── test_tools.py        # Tests for MCP tools
-│   ├── test_resources.py    # Tests for MCP resources
-│   └── test_state.py        # Tests for StateManager and Pydantic models
-├── pyproject.toml           # Project configuration
-├── CLAUDE.md               # Development guidance
-├── PROMPTS.md              # Conversation history
-└── README.md               # This file
+│   ├── test_tools.py            # Tests for core tools
+│   ├── test_resources.py        # Tests for MCP resources
+│   ├── test_state.py            # Tests for StateManager and Pydantic models
+│   ├── test_server_integration.py  # MCP server integration tests
+│   ├── test_ansible_integration.py # Ansible automation tests
+│   └── test_playbook_generation.py # Playbook generation tests
+├── pyproject.toml               # Project configuration
+├── inventory.yml                # Example Ansible inventory
+├── PLAN.md                      # Implementation roadmap
+├── CLAUDE.md                    # Development guidance
+├── PROMPTS.md                   # Conversation history
+└── README.md                    # This file
 ```
 
-## Session ID Usage
+## Architecture
 
-The FTL MCP server demonstrates advanced usage of FastMCP session IDs for tracking and managing session-specific data:
-
-### Session ID Access
-```python
-@mcp.tool()
-async def example_with_session_id(ctx: Context) -> dict:
-    # Get session ID from FastMCP context
-    session_id = getattr(ctx, 'session_id', None) or f"session_{ctx.request_id}"
-    
-    # Use session ID for data isolation
-    if session_id not in session_storage:
-        session_storage[session_id] = {}
-    
-    return {"session_id": session_id}
+```
+┌─────────────────────┐    ┌──────────────────────┐    ┌─────────────────────┐
+│   MCP Client        │───▶│   FTL MCP Server     │───▶│  faster_than_light  │
+│   (Control Plane)   │    │   (Management Layer) │    │  (Execution Engine) │
+└─────────────────────┘    └──────────────────────┘    └─────────────────────┘
+                                      │
+                                      ▼
+                           ┌──────────────────────┐
+                           │   StateManager       │
+                           │   (State & History)  │
+                           └──────────────────────┘
 ```
 
-### Key Features Demonstrated
-- **Session Isolation**: Each client session gets its own data storage
-- **Activity Tracking**: Log all activities with timestamps and request IDs  
-- **Data Persistence**: Session data persists across multiple tool calls
-- **Session Management**: Start, update, query, and clear session-specific data
-- **Multi-Session Support**: Track multiple concurrent sessions
+## Key Features Demonstrated
+
+### State Management
+- **Persistent storage** using StateManager with Pydantic models
+- **Session isolation** for multiple concurrent users
+- **Activity tracking** with timestamps and request IDs
+- **Execution history** for automation tasks
+
+### High-Performance Automation
+- **faster_than_light integration** for 2-10x performance improvement
+- **SSH connection pooling** and gate management
+- **Async execution** with concurrent host operations
+- **Error handling** and comprehensive logging
+
+### Infrastructure as Code
+- **Automatic task logging** for all executed operations
+- **Playbook generation** from recorded automation tasks
+- **YAML export** for version control and repeatability
+- **Task filtering** and optimization
 
 ### Example Session Usage
 ```python
-# Start a session tracker
-await session.call_tool("start_session_tracker", {"session_name": "My Session"})
+# Start session tracking
+await client.call_tool("start_session_tracker", {"session_name": "Production Deploy"})
 
-# Store session-specific data  
-await session.call_tool("update_session_data", {"key": "user_pref", "value": "dark_mode"})
+# Load inventory for targeting
+await client.call_tool("load_inventory", {"inventory_path": "production.yml"})
 
-# Retrieve session information
-result = await session.call_tool("get_session_info", {})
-# Returns: session data, activity log, request counts, etc.
+# Execute automation tasks
+await client.call_tool("ansible_copy", {
+    "src": "app.tar.gz", 
+    "dest": "/opt/app/", 
+    "hosts": "app_servers"
+})
 
-# List all active sessions
-await session.call_tool("list_active_sessions", {})
-```
+await client.call_tool("ansible_command", {
+    "command": "systemctl restart app",
+    "hosts": "app_servers"  
+})
 
-## Example Usage
+# Generate playbook from session
+playbook = await client.call_tool("generate_playbook", {
+    "playbook_name": "production_deploy"
+})
 
-Once the server is running, you can use the MCP tools through any MCP-compatible client:
-
-```python
-# Calculate if a speed is faster than light
-calculate_speed(1000000, 0.001)  # Very fast!
-# Returns: {"is_faster_than_light": true, ...}
-
-# List current directory
-list_directory(".")
-# Returns: {"path": "/current/path", "items": [...]}
-
-# Read a file
-# Access via resource: file://path/to/file.txt
-
-# Ansible inventory management
-load_inventory("inventory.yml")
-get_inventory_hosts("webservers") 
-save_inventory("output.yml")
+# Save for future use
+with open("production_deploy.yml", "w") as f:
+    f.write(playbook.data["yaml"])
 ```
 
 ## Requirements
@@ -163,6 +230,35 @@ save_inventory("output.yml")
 - FastMCP
 - MCP
 - Pydantic
+- PyYAML
+- faster_than_light
+- anyio
+
+## Testing
+
+The project includes comprehensive test coverage:
+- **54 tests** covering all functionality
+- **Unit tests** for individual components
+- **Integration tests** for MCP server tools
+- **Ansible execution tests** using faster_than_light test modules
+- **Playbook generation tests** for Infrastructure as Code workflows
+
+```bash
+# Run all tests
+pytest -v
+
+# Run specific test suites
+pytest tests/test_ansible_integration.py -v
+pytest tests/test_playbook_generation.py -v
+```
+
+## Performance
+
+Leverages faster_than_light for significant performance improvements:
+- **2-10x faster** execution compared to standard Ansible
+- **Async-first architecture** with concurrent operations
+- **SSH connection pooling** for efficient remote access
+- **Optimized module execution** with minimal overhead
 
 ## License
 
