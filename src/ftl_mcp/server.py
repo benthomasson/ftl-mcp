@@ -5,6 +5,16 @@ from pathlib import Path
 import yaml
 from fastmcp import Context, FastMCP
 
+from .state import (
+    InventoryData,
+    InventoryGroup, 
+    InventoryHost,
+    MissionAlert,
+    MissionData,
+    SessionActivity,
+    SessionData,
+    state_manager,
+)
 from .tools import calculate_speed as _calculate_speed
 from .tools import get_current_time as _get_current_time
 from .tools import list_directory as _list_directory
@@ -14,11 +24,8 @@ from .tools import read_file as _read_file
 # Create the MCP server
 mcp = FastMCP("ftl-mcp")
 
-# In-memory storage for inventory data (fallback if context state doesn't work)
+# In-memory storage for inventory (since StateManager is used for sessions/missions)
 _inventory_storage = {"ansible_inventory": None, "inventory_history": []}
-
-# Session-specific storage for demonstration
-_session_storage = {}
 
 
 @mcp.tool()
@@ -124,24 +131,24 @@ async def start_ftl_mission(mission_name: str, destination: str, ctx: Context) -
         f"Client {ctx.client_id or 'Unknown'} starting FTL mission: {mission_name}"
     )
 
-    # Initialize mission state
-    mission_data = {
-        "name": mission_name,
-        "destination": destination,
-        "status": "planning",
-        "start_time": _get_current_time(),
-        "fuel_level": 100.0,
-        "crew_count": 5,
-        "distance_traveled": 0.0,
-        "alerts": [],
-    }
+    # Initialize mission state using Pydantic model
+    mission_data = MissionData(
+        name=mission_name,
+        destination=destination,
+        status="planning",
+        start_time=_get_current_time(),
+        fuel_level=100.0,
+        crew_count=5,
+        distance_traveled=0.0,
+        alerts=[],
+    )
 
-    # Store in context state
-    ctx.set_state("current_mission", mission_data)
-    ctx.set_state("mission_history", [mission_name])
+    # Store in state manager
+    state_manager.set_current_mission(mission_data)
+    state_manager.set_mission_history([mission_name])
 
-    await ctx.info(f"Mission '{mission_name}' initialized in context state")
-    return mission_data
+    await ctx.info(f"Mission '{mission_name}' initialized in state manager")
+    return mission_data.model_dump()
 
 
 @mcp.tool()
@@ -168,51 +175,47 @@ async def update_ftl_mission(
 
     await ctx.info(f"Client {ctx.client_id or 'Unknown'} updating FTL mission")
 
-    # Retrieve current mission from state
-    current_mission = ctx.get_state("current_mission")
+    # Retrieve current mission from state manager
+    current_mission = state_manager.get_current_mission()
     if not current_mission:
-        await ctx.warning("No active mission found in context state")
+        await ctx.warning("No active mission found in state manager")
         return {
             "error": "No active mission. Start a mission first using start_ftl_mission."
         }
 
     # Update mission data
     if status:
-        current_mission["status"] = status
+        current_mission.status = status
         await ctx.info(f"Mission status updated to: {status}")
 
     if fuel_consumed > 0:
-        current_mission["fuel_level"] = max(
-            0.0, current_mission["fuel_level"] - fuel_consumed
-        )
+        current_mission.fuel_level = max(0.0, current_mission.fuel_level - fuel_consumed)
         await ctx.debug(
-            f"Fuel consumed: {fuel_consumed}, remaining: {current_mission['fuel_level']}"
+            f"Fuel consumed: {fuel_consumed}, remaining: {current_mission.fuel_level}"
         )
 
     if distance > 0:
-        current_mission["distance_traveled"] += distance
+        current_mission.distance_traveled += distance
         await ctx.debug(
-            f"Distance traveled: +{distance}, total: {current_mission['distance_traveled']}"
+            f"Distance traveled: +{distance}, total: {current_mission.distance_traveled}"
         )
 
     if alert:
-        current_mission["alerts"].append(
-            {"timestamp": _get_current_time(), "message": alert}
-        )
+        mission_alert = MissionAlert(timestamp=_get_current_time(), message=alert)
+        current_mission.alerts.append(mission_alert)
         await ctx.warning(f"Mission alert: {alert}")
 
     # Check for critical conditions
-    if current_mission["fuel_level"] < 20.0:
-        fuel_alert = f"LOW FUEL WARNING: {current_mission['fuel_level']:.1f}% remaining"
-        current_mission["alerts"].append(
-            {"timestamp": _get_current_time(), "message": fuel_alert}
-        )
-        await ctx.warning(fuel_alert)
+    if current_mission.fuel_level < 20.0:
+        fuel_alert_msg = f"LOW FUEL WARNING: {current_mission.fuel_level:.1f}% remaining"
+        fuel_alert = MissionAlert(timestamp=_get_current_time(), message=fuel_alert_msg)
+        current_mission.alerts.append(fuel_alert)
+        await ctx.warning(fuel_alert_msg)
 
-    # Update state
-    ctx.set_state("current_mission", current_mission)
+    # Update state manager
+    state_manager.set_current_mission(current_mission)
 
-    return current_mission
+    return current_mission.model_dump()
 
 
 @mcp.tool()
@@ -224,22 +227,22 @@ async def get_ftl_mission_status(ctx: Context) -> dict:
     """
     await ctx.info(f"Client {ctx.client_id or 'Unknown'} requesting mission status")
 
-    # Retrieve mission from state
-    current_mission = ctx.get_state("current_mission")
-    mission_history = ctx.get_state("mission_history") or []
+    # Retrieve mission from state manager
+    current_mission = state_manager.get_current_mission()
+    mission_history = state_manager.get_mission_history()
 
     if not current_mission:
-        await ctx.debug("No active mission in context state")
+        await ctx.debug("No active mission in state manager")
         return {
             "active_mission": None,
             "mission_history": mission_history,
             "message": "No active mission",
         }
 
-    await ctx.debug(f"Retrieved mission: {current_mission['name']}")
+    await ctx.debug(f"Retrieved mission: {current_mission.name}")
 
     return {
-        "active_mission": current_mission,
+        "active_mission": current_mission.model_dump(),
         "mission_history": mission_history,
         "state_info": {
             "context_id": ctx.request_id,
@@ -263,26 +266,27 @@ async def start_session_tracker(session_name: str, ctx: Context) -> dict:
         f"Client {ctx.client_id or 'Unknown'} starting session tracker: {session_name}"
     )
 
-    # Initialize session data
-    session_data = {
-        "session_id": session_id,
-        "session_name": session_name,
-        "start_time": _get_current_time(),
-        "client_id": ctx.client_id or "Unknown",
-        "request_count": 1,
-        "last_activity": _get_current_time(),
-        "activities": [
-            {
-                "timestamp": _get_current_time(),
-                "action": "session_started",
-                "request_id": ctx.request_id,
-            }
+    # Initialize session data using Pydantic model
+    current_time = _get_current_time()
+    session_data = SessionData(
+        session_id=session_id,
+        session_name=session_name,
+        start_time=current_time,
+        client_id=ctx.client_id or "Unknown",
+        request_count=1,
+        last_activity=current_time,
+        activities=[
+            SessionActivity(
+                timestamp=current_time,
+                action="session_started",
+                request_id=ctx.request_id,
+            )
         ],
-        "session_data": {},
-    }
+        session_data={},
+    )
 
-    # Store in session storage
-    _session_storage[session_id] = session_data
+    # Store in state manager
+    state_manager.set_session(session_id, session_data)
 
     await ctx.info(
         f"Session tracker '{session_name}' initialized with ID: {session_id}"
@@ -292,8 +296,8 @@ async def start_session_tracker(session_name: str, ctx: Context) -> dict:
         "status": "started",
         "session_id": session_id,
         "session_name": session_name,
-        "start_time": session_data["start_time"],
-        "client_id": session_data["client_id"],
+        "start_time": session_data.start_time,
+        "client_id": session_data.client_id,
     }
 
 
@@ -312,38 +316,42 @@ async def update_session_data(key: str, value: str, ctx: Context) -> dict:
     await ctx.info(f"Client {ctx.client_id or 'Unknown'} updating session data: {key}")
 
     # Get or create session data
-    if session_id not in _session_storage:
+    session_data = state_manager.get_session(session_id)
+    if not session_data:
         await ctx.warning(
             f"No session found for ID: {session_id}, creating new session"
         )
-        _session_storage[session_id] = {
-            "session_id": session_id,
-            "session_name": "Auto-created",
-            "start_time": _get_current_time(),
-            "client_id": ctx.client_id or "Unknown",
-            "request_count": 0,
-            "last_activity": _get_current_time(),
-            "activities": [],
-            "session_data": {},
-        }
-
-    session_data = _session_storage[session_id]
+        current_time = _get_current_time()
+        session_data = SessionData(
+            session_id=session_id,
+            session_name="Auto-created",
+            start_time=current_time,
+            client_id=ctx.client_id or "Unknown",
+            request_count=0,
+            last_activity=current_time,
+            activities=[],
+            session_data={},
+        )
 
     # Update session activity
-    session_data["request_count"] += 1
-    session_data["last_activity"] = _get_current_time()
-    session_data["activities"].append(
-        {
-            "timestamp": _get_current_time(),
-            "action": f"data_update",
-            "request_id": ctx.request_id,
-            "details": f"Updated key '{key}'",
-        }
+    current_time = _get_current_time()
+    session_data.request_count += 1
+    session_data.last_activity = current_time
+    session_data.activities.append(
+        SessionActivity(
+            timestamp=current_time,
+            action="data_update",
+            request_id=ctx.request_id,
+            details=f"Updated key '{key}'",
+        )
     )
 
     # Store the data
-    old_value = session_data["session_data"].get(key)
-    session_data["session_data"][key] = value
+    old_value = session_data.session_data.get(key)
+    session_data.session_data[key] = value
+    
+    # Save back to state manager
+    state_manager.set_session(session_id, session_data)
 
     await ctx.debug(f"Updated session data: {key} = {value}")
 
@@ -353,8 +361,8 @@ async def update_session_data(key: str, value: str, ctx: Context) -> dict:
         "key": key,
         "old_value": old_value,
         "new_value": value,
-        "request_count": session_data["request_count"],
-        "last_activity": session_data["last_activity"],
+        "request_count": session_data.request_count,
+        "last_activity": session_data.last_activity,
     }
 
 
@@ -368,42 +376,46 @@ async def get_session_info(ctx: Context) -> dict:
     session_id = getattr(ctx, "session_id", None) or f"session_{ctx.request_id}"
     await ctx.info(f"Client {ctx.client_id or 'Unknown'} requesting session info")
 
-    if session_id not in _session_storage:
+    session_data = state_manager.get_session(session_id)
+    if not session_data:
         await ctx.debug(f"No session data found for ID: {session_id}")
+        active_sessions = list(state_manager.list_sessions().keys())
         return {
             "session_found": False,
             "session_id": session_id,
             "message": "No session tracker started. Use start_session_tracker first.",
-            "active_sessions": list(_session_storage.keys()),
+            "active_sessions": active_sessions,
         }
-
-    session_data = _session_storage[session_id]
 
     # Update activity
-    session_data["request_count"] += 1
-    session_data["last_activity"] = _get_current_time()
-    session_data["activities"].append(
-        {
-            "timestamp": _get_current_time(),
-            "action": "info_request",
-            "request_id": ctx.request_id,
-        }
+    current_time = _get_current_time()
+    session_data.request_count += 1
+    session_data.last_activity = current_time
+    session_data.activities.append(
+        SessionActivity(
+            timestamp=current_time,
+            action="info_request",
+            request_id=ctx.request_id,
+        )
     )
+    
+    # Save back to state manager
+    state_manager.set_session(session_id, session_data)
 
-    await ctx.debug(f"Retrieved session info for: {session_data['session_name']}")
+    await ctx.debug(f"Retrieved session info for: {session_data.session_name}")
 
     return {
         "session_found": True,
         "session_id": session_id,
-        "session_name": session_data["session_name"],
-        "start_time": session_data["start_time"],
-        "client_id": session_data["client_id"],
-        "request_count": session_data["request_count"],
-        "last_activity": session_data["last_activity"],
-        "session_data_keys": list(session_data["session_data"].keys()),
-        "session_data": session_data["session_data"],
-        "recent_activities": session_data["activities"][-5:],  # Last 5 activities
-        "total_activities": len(session_data["activities"]),
+        "session_name": session_data.session_name,
+        "start_time": session_data.start_time,
+        "client_id": session_data.client_id,
+        "request_count": session_data.request_count,
+        "last_activity": session_data.last_activity,
+        "session_data_keys": list(session_data.session_data.keys()),
+        "session_data": session_data.session_data,
+        "recent_activities": [activity.model_dump() for activity in session_data.activities[-5:]],  # Last 5 activities
+        "total_activities": len(session_data.activities),
     }
 
 
@@ -418,7 +430,8 @@ async def list_active_sessions(ctx: Context) -> dict:
         f"Client {ctx.client_id or 'Unknown'} requesting active sessions list"
     )
 
-    if not _session_storage:
+    sessions = state_manager.list_sessions()
+    if not sessions:
         await ctx.debug("No active sessions found")
         return {
             "active_session_count": 0,
@@ -428,16 +441,16 @@ async def list_active_sessions(ctx: Context) -> dict:
 
     # Build session summary
     sessions_summary = []
-    for session_id, session_data in _session_storage.items():
+    for session_id, session_data in sessions.items():
         summary = {
             "session_id": session_id,
-            "session_name": session_data["session_name"],
-            "start_time": session_data["start_time"],
-            "client_id": session_data["client_id"],
-            "request_count": session_data["request_count"],
-            "last_activity": session_data["last_activity"],
-            "data_keys": list(session_data["session_data"].keys()),
-            "data_count": len(session_data["session_data"]),
+            "session_name": session_data.session_name,
+            "start_time": session_data.start_time,
+            "client_id": session_data.client_id,
+            "request_count": session_data.request_count,
+            "last_activity": session_data.last_activity,
+            "data_keys": list(session_data.session_data.keys()),
+            "data_count": len(session_data.session_data),
         }
         sessions_summary.append(summary)
 
@@ -461,7 +474,8 @@ async def clear_session_data(ctx: Context) -> dict:
     session_id = getattr(ctx, "session_id", None) or f"session_{ctx.request_id}"
     await ctx.info(f"Client {ctx.client_id or 'Unknown'} clearing session data")
 
-    if session_id not in _session_storage:
+    session_data = state_manager.get_session(session_id)
+    if not session_data:
         await ctx.warning(f"No session found for ID: {session_id}")
         return {
             "status": "not_found",
@@ -469,34 +483,37 @@ async def clear_session_data(ctx: Context) -> dict:
             "message": "No session data to clear",
         }
 
-    session_data = _session_storage[session_id]
-    data_keys_cleared = list(session_data["session_data"].keys())
-    data_count_cleared = len(session_data["session_data"])
+    data_keys_cleared = list(session_data.session_data.keys())
+    data_count_cleared = len(session_data.session_data)
 
     # Clear session data but keep session metadata
-    session_data["session_data"] = {}
-    session_data["request_count"] += 1
-    session_data["last_activity"] = _get_current_time()
-    session_data["activities"].append(
-        {
-            "timestamp": _get_current_time(),
-            "action": "data_cleared",
-            "request_id": ctx.request_id,
-            "details": f"Cleared {data_count_cleared} data items",
-        }
+    current_time = _get_current_time()
+    session_data.session_data = {}
+    session_data.request_count += 1
+    session_data.last_activity = current_time
+    session_data.activities.append(
+        SessionActivity(
+            timestamp=current_time,
+            action="data_cleared",
+            request_id=ctx.request_id,
+            details=f"Cleared {data_count_cleared} data items",
+        )
     )
+    
+    # Save back to state manager
+    state_manager.set_session(session_id, session_data)
 
     await ctx.info(
-        f"Cleared {data_count_cleared} items from session '{session_data['session_name']}'"
+        f"Cleared {data_count_cleared} items from session '{session_data.session_name}'"
     )
 
     return {
         "status": "cleared",
         "session_id": session_id,
-        "session_name": session_data["session_name"],
+        "session_name": session_data.session_name,
         "data_keys_cleared": data_keys_cleared,
         "items_cleared": data_count_cleared,
-        "request_count": session_data["request_count"],
+        "request_count": session_data.request_count,
     }
 
 
@@ -510,31 +527,28 @@ async def complete_ftl_mission(ctx: Context) -> dict:
     await ctx.info(f"Client {ctx.client_id or 'Unknown'} completing FTL mission")
 
     # Retrieve current mission
-    current_mission = ctx.get_state("current_mission")
+    current_mission = state_manager.get_current_mission()
     if not current_mission:
         await ctx.warning("No active mission to complete")
         return {"error": "No active mission to complete"}
 
-    # Update mission history
-    mission_history = ctx.get_state("mission_history") or []
-
     # Create completion summary
     completion_summary = {
-        "mission_name": current_mission["name"],
-        "destination": current_mission["destination"],
+        "mission_name": current_mission.name,
+        "destination": current_mission.destination,
         "completion_time": _get_current_time(),
-        "total_distance": current_mission["distance_traveled"],
-        "final_fuel_level": current_mission["fuel_level"],
-        "total_alerts": len(current_mission["alerts"]),
+        "total_distance": current_mission.distance_traveled,
+        "final_fuel_level": current_mission.fuel_level,
+        "total_alerts": len(current_mission.alerts),
         "mission_duration": "Calculated from start_time",  # Could calculate actual duration
         "status": "completed",
     }
 
     # Clear current mission from state but keep history
-    ctx.set_state("current_mission", None)
-    ctx.set_state("last_completed_mission", completion_summary)
+    state_manager.set_current_mission(None)
+    state_manager.set_last_completed_mission(completion_summary)
 
-    await ctx.info(f"Mission '{current_mission['name']}' completed successfully")
+    await ctx.info(f"Mission '{current_mission.name}' completed successfully")
 
     return completion_summary
 
@@ -646,22 +660,9 @@ async def load_inventory(inventory_path: str, ctx: Context) -> dict:
         parsed_inventory["total_hosts"] = len(parsed_inventory["hosts"])
         parsed_inventory["total_groups"] = len(parsed_inventory["groups"])
 
-        # Store in both context state and fallback storage
-        ctx.set_state("ansible_inventory", parsed_inventory)
-        ctx.set_state("inventory_history", [inventory_path])
-
-        # Fallback storage
+        # Store in in-memory storage
         _inventory_storage["ansible_inventory"] = parsed_inventory
         _inventory_storage["inventory_history"] = [inventory_path]
-
-        # Debug: Verify state was stored
-        stored_inventory = ctx.get_state("ansible_inventory")
-        if stored_inventory:
-            await ctx.info(
-                f"✅ Context state verified: {stored_inventory['total_hosts']} hosts stored"
-            )
-        else:
-            await ctx.warning("⚠️ Context state not verified, using fallback storage")
 
         await ctx.info(
             f"Successfully loaded inventory with {parsed_inventory['total_hosts']} hosts and {parsed_inventory['total_groups']} groups"
@@ -699,15 +700,9 @@ async def get_inventory_status(ctx: Context) -> dict:
     # Debug: Log context info
     await ctx.debug(f"Context request_id: {ctx.request_id}, client_id: {ctx.client_id}")
 
-    inventory = ctx.get_state("ansible_inventory")
-    history = ctx.get_state("inventory_history") or []
-
-    # Fallback to in-memory storage if context state is empty
-    if not inventory:
-        inventory = _inventory_storage["ansible_inventory"]
-        history = _inventory_storage["inventory_history"]
-        if inventory:
-            await ctx.info("Using fallback storage for inventory data")
+    # Get inventory from in-memory storage
+    inventory = _inventory_storage["ansible_inventory"]
+    history = _inventory_storage["inventory_history"]
 
     # Debug: Log what we found in state
     await ctx.debug(f"Found inventory in state: {inventory is not None}")
@@ -715,7 +710,7 @@ async def get_inventory_status(ctx: Context) -> dict:
         await ctx.debug(f"Inventory has {len(inventory.get('hosts', {}))} hosts")
 
     if not inventory:
-        await ctx.debug("No inventory loaded in context state")
+        await ctx.debug("No inventory loaded in memory storage")
         return {
             "inventory_loaded": False,
             "message": "No inventory loaded",
@@ -754,16 +749,11 @@ async def get_inventory_hosts(group_name: str = None, ctx: Context = None) -> di
         + (f" in group '{group_name}'" if group_name else "")
     )
 
-    inventory = ctx.get_state("ansible_inventory")
-
-    # Fallback to in-memory storage if context state is empty
-    if not inventory:
-        inventory = _inventory_storage["ansible_inventory"]
-        if inventory:
-            await ctx.info("Using fallback storage for hosts query")
+    # Get inventory from fallback storage
+    inventory = _inventory_storage["ansible_inventory"]
 
     if not inventory:
-        await ctx.warning("No inventory loaded in context state or fallback storage")
+        await ctx.warning("No inventory loaded in memory storage")
         return {
             "error": "No inventory loaded. Load an inventory first using load_inventory."
         }
@@ -808,16 +798,11 @@ async def get_inventory_groups(ctx: Context) -> dict:
     """
     await ctx.info(f"Client {ctx.client_id or 'Unknown'} requesting inventory groups")
 
-    inventory = ctx.get_state("ansible_inventory")
-
-    # Fallback to in-memory storage if context state is empty
-    if not inventory:
-        inventory = _inventory_storage["ansible_inventory"]
-        if inventory:
-            await ctx.info("Using fallback storage for groups query")
+    # Get inventory from fallback storage
+    inventory = _inventory_storage["ansible_inventory"]
 
     if not inventory:
-        await ctx.warning("No inventory loaded in context state or fallback storage")
+        await ctx.warning("No inventory loaded in memory storage")
         return {
             "error": "No inventory loaded. Load an inventory first using load_inventory."
         }
@@ -841,17 +826,11 @@ async def save_inventory(output_path: str, ctx: Context) -> dict:
         f"Client {ctx.client_id or 'Unknown'} saving inventory to: {output_path}"
     )
 
-    # Retrieve inventory from context state
-    inventory = ctx.get_state("ansible_inventory")
-
-    # Fallback to in-memory storage if context state is empty
-    if not inventory:
-        inventory = _inventory_storage["ansible_inventory"]
-        if inventory:
-            await ctx.info("Using fallback storage for save operation")
+    # Retrieve inventory from fallback storage
+    inventory = _inventory_storage["ansible_inventory"]
 
     if not inventory:
-        await ctx.warning("No inventory found in context state or fallback storage")
+        await ctx.warning("No inventory found in memory storage")
         return {
             "error": "No inventory loaded. Load an inventory first using load_inventory."
         }

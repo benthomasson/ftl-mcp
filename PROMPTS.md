@@ -104,6 +104,36 @@ This document contains the chronological list of prompts that were used to build
 
 *Instruction to maintain ongoing documentation of conversation prompts.*
 
+## 18. Context State Clarification
+
+**Prompt:** "Apparently context state is not persisted between requests, so to have persistent state we need to store it in global memory. This was not very clear in the documentation."
+
+*Important clarification about FastMCP context state behavior - context state doesn't persist between requests, requiring global memory for persistent state.*
+
+## 19. In-Memory Storage Recommendations
+
+**Prompt:** "What in-memory storage mechanism would you suggest for storing JSON compatible datastructures?"
+
+*Request for recommendations on persistent in-memory storage solutions for JSON-compatible data.*
+
+## 20. State Manager Implementation
+
+**Prompt:** "Add the StateManager to state.py and import that into server.py"
+
+*Implementation of proper state management with Pydantic models for type safety and validation.*
+
+## 21. State Manager Testing
+
+**Prompt:** "Write unit tests for the state manager."
+
+*Request for comprehensive unit tests to validate StateManager functionality and Pydantic models.*
+
+## 22. Context State Cleanup
+
+**Prompt:** "Remove calls to ctx.set_state and ctx.get_state since that was not effective."
+
+*Successfully cleaned up all ineffective FastMCP context state calls. The server now relies solely on StateManager for sessions/missions and _inventory_storage for inventory data. All ctx.set_state() and ctx.get_state() calls have been removed from server.py.*
+
 ---
 
 ## Project Evolution Summary

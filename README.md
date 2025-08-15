@@ -87,12 +87,15 @@ ftl-mcp/
 ├── src/ftl_mcp/
 │   ├── __init__.py          # Package initialization
 │   ├── server.py            # FastMCP server with decorated endpoints
+│   ├── state.py             # StateManager with Pydantic models
 │   └── tools.py             # Core business logic functions
 ├── tests/
 │   ├── test_tools.py        # Tests for MCP tools
-│   └── test_resources.py    # Tests for MCP resources
+│   ├── test_resources.py    # Tests for MCP resources
+│   └── test_state.py        # Tests for StateManager and Pydantic models
 ├── pyproject.toml           # Project configuration
 ├── CLAUDE.md               # Development guidance
+├── PROMPTS.md              # Conversation history
 └── README.md               # This file
 ```
 
