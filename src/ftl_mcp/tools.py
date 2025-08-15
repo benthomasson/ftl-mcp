@@ -13,35 +13,35 @@ def get_current_time() -> str:
 
 def calculate_speed(distance: float, time: float) -> dict[str, Any]:
     """Calculate speed given distance and time.
-    
+
     Args:
         distance: Distance in kilometers
         time: Time in hours
-        
+
     Returns:
         Dictionary with speed calculations
     """
     if time <= 0:
         raise ValueError("Time must be greater than zero")
-    
+
     speed_kmh = distance / time
     speed_ms = speed_kmh / 3.6
-    
+
     return {
         "distance_km": distance,
         "time_hours": time,
         "speed_kmh": speed_kmh,
         "speed_ms": speed_ms,
-        "is_faster_than_light": speed_ms > 299792458  # Speed of light in m/s
+        "is_faster_than_light": speed_ms > 299792458,  # Speed of light in m/s
     }
 
 
 def list_directory(path: str = ".") -> dict[str, Any]:
     """List contents of a directory.
-    
+
     Args:
         path: Directory path to list (defaults to current directory)
-        
+
     Returns:
         Dictionary with directory information
     """
@@ -49,23 +49,27 @@ def list_directory(path: str = ".") -> dict[str, Any]:
         dir_path = Path(path)
         if not dir_path.exists():
             return {"error": f"Path does not exist: {path}"}
-        
+
         if not dir_path.is_dir():
             return {"error": f"Path is not a directory: {path}"}
-        
+
         items = []
         for item in dir_path.iterdir():
-            items.append({
-                "name": item.name,
-                "type": "directory" if item.is_dir() else "file",
-                "size": item.stat().st_size if item.is_file() else None,
-                "modified": datetime.fromtimestamp(item.stat().st_mtime).isoformat()
-            })
-        
+            items.append(
+                {
+                    "name": item.name,
+                    "type": "directory" if item.is_dir() else "file",
+                    "size": item.stat().st_size if item.is_file() else None,
+                    "modified": datetime.fromtimestamp(
+                        item.stat().st_mtime
+                    ).isoformat(),
+                }
+            )
+
         return {
             "path": str(dir_path.absolute()),
             "item_count": len(items),
-            "items": sorted(items, key=lambda x: x["name"])
+            "items": sorted(items, key=lambda x: x["name"]),
         }
     except Exception as e:
         return {"error": str(e)}
@@ -73,10 +77,10 @@ def list_directory(path: str = ".") -> dict[str, Any]:
 
 def read_file(path: str) -> str:
     """Read the contents of a file.
-    
+
     Args:
         path: Path to the file to read (URI format: file:///absolute/path)
-        
+
     Returns:
         File contents as string
     """
@@ -87,14 +91,14 @@ def read_file(path: str) -> str:
             actual_path = path.replace("file://", "", 1)
         else:
             actual_path = path
-        
+
         file_path = Path(actual_path)
         if not file_path.exists():
             return f"Error: File does not exist: {actual_path}"
-        
+
         if not file_path.is_file():
             return f"Error: Path is not a file: {actual_path}"
-        
+
         return file_path.read_text(encoding="utf-8")
     except Exception as e:
         return f"Error reading file: {str(e)}"
