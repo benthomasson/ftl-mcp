@@ -16,6 +16,11 @@ An advanced MCP (Model Context Protocol) server for high-performance automation,
 - **generate_playbook(playbook_name, include_failed)** - Convert tasks to Ansible playbook YAML
 - **clear_playbook_tasks()** - Clear task history to start fresh
 
+### Secrets Management (Secure)
+- **get_secrets_status()** - View secrets manager status and statistics (safe)
+- **check_secret_exists(name)** - Check if a secret exists without exposing values
+- **reload_secrets()** - Reload secrets from environment variables and encrypted files
+
 ### Core Tools
 - **get_context_info()** - Get FastMCP context information (client ID, request ID, etc.)
 
@@ -110,6 +115,29 @@ with open("webserver_setup.yml", "w") as f:
 - **Async execution** with SSH connection pooling
 - **Concurrent operations** across multiple hosts
 - **Real-time monitoring** and execution tracking
+
+#### 4. Secure Secrets Management
+```bash
+# Load secrets via environment variables (RECOMMENDED)
+export FTL_SECRET_SSH_USER=myuser
+export FTL_SECRET_SSH_PASSWORD=mypassword
+export FTL_SECRET_API_KEY=sk-1234567890
+
+# Check secrets status (safe - no values exposed)
+await client.call_tool("get_secrets_status", {})
+
+# Check if specific secrets exist
+await client.call_tool("check_secret_exists", {"name": "ssh_user"})
+
+# Reload secrets from environment and files (useful after updating external sources)
+await client.call_tool("reload_secrets", {})
+
+# Secrets are automatically used in SSH connections
+await client.call_tool("ansible_command", {
+    "command": "uptime",
+    "hosts": "production_servers"  # Uses SSH credentials from secrets
+})
+```
 
 ### Development
 
@@ -230,16 +258,18 @@ with open("production_deploy.yml", "w") as f:
 - PyYAML
 - faster_than_light
 - ftl_modules (automation modules package)
+- cryptography (for secrets encryption)
 - anyio
 
 ## Testing
 
 The project includes comprehensive test coverage:
-- **46 tests** covering all functionality
+- **62 tests** covering all functionality
 - **Unit tests** for individual components
 - **Integration tests** for MCP server tools
 - **Ansible execution tests** using faster_than_light test modules
 - **Playbook generation tests** for Infrastructure as Code workflows
+- **Secrets management tests** for secure credential handling
 
 ```bash
 # Run all tests

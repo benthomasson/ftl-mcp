@@ -16,6 +16,7 @@ from fastmcp import Context
 
 from .state import state_manager
 from .tools import get_current_time as _get_current_time
+from .secrets import get_secret
 
 
 class FTLExecutionError(Exception):
@@ -238,6 +239,18 @@ class FTLExecutor:
                 }
             }
         }
+        
+        # Add SSH credentials from secrets if available
+        ssh_user = get_secret("ssh_user")
+        ssh_password = get_secret("ssh_password")
+        ssh_key_file = get_secret("ssh_key_file")
+        
+        if ssh_user:
+            inventory["all"]["vars"]["ansible_user"] = ssh_user
+        if ssh_password:
+            inventory["all"]["vars"]["ansible_password"] = ssh_password
+        if ssh_key_file:
+            inventory["all"]["vars"]["ansible_ssh_private_key_file"] = ssh_key_file
         
         for host in hosts:
             if host == "localhost":

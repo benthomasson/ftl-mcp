@@ -24,6 +24,7 @@ from ftl_mcp.ftl_integration import (
     FTLExecutionError,
     task_logger,
 )
+from ftl_mcp.secrets import secrets_manager
 
 # Create the MCP server
 mcp = FastMCP("ftl-mcp")
@@ -1145,6 +1146,139 @@ async def clear_playbook_tasks(ctx: Context = None) -> dict:
     except Exception as e:
         await ctx.error(f"Error clearing playbook tasks: {str(e)}")
         return {"error": f"Failed to clear tasks: {str(e)}"}
+
+
+# =============================================================================
+# Secrets Management Tools (Secure - No Exposure to MCP Clients)
+# =============================================================================
+
+@mcp.tool()
+async def get_secrets_status(ctx: Context = None) -> dict:
+    """Get status of the secrets manager (safe information only).
+    
+    This tool provides information about loaded secrets without exposing
+    any secret values. Safe for use by MCP clients like Claude Code.
+    
+    Returns:
+        Dictionary with secrets manager status and statistics
+    """
+    if not ctx:
+        return {"error": "Context not available"}
+        
+    await ctx.info(f"Client {ctx.client_id or 'Unknown'} requesting secrets status")
+    
+    try:
+        stats = secrets_manager.get_stats()
+        secret_names = secrets_manager.list_secret_names()
+        
+        # Get metadata for each secret (safe to expose)
+        secrets_info = []
+        for name in secret_names:
+            metadata = secrets_manager.get_secret_metadata(name)
+            if metadata:
+                secrets_info.append({
+                    "name": metadata.name,
+                    "description": metadata.description,
+                    "created_at": metadata.created_at,
+                    "updated_at": metadata.updated_at,
+                    "tags": metadata.tags
+                })
+        
+        await ctx.info(f"Retrieved status for {stats['total_secrets']} secrets")
+        
+        return {
+            "status": "success",
+            "statistics": stats,
+            "secrets": secrets_info,
+            "loading_instructions": {
+                "environment_variables": "Set FTL_SECRET_<NAME>=<value> environment variables",
+                "encrypted_file": "Manual file creation with SecretsManager.save_to_encrypted_file()",
+                "encryption_key": "Set FTL_MCP_ENCRYPTION_KEY environment variable"
+            }
+        }
+        
+    except Exception as e:
+        await ctx.error(f"Error getting secrets status: {str(e)}")
+        return {"error": f"Failed to get secrets status: {str(e)}"}
+
+
+
+@mcp.tool()
+async def check_secret_exists(name: str, ctx: Context = None) -> dict:
+    """Check if a secret exists (safe - no secret values exposed).
+    
+    Args:
+        name: Secret name to check
+        
+    Returns:
+        Dictionary with existence status and metadata
+    """
+    if not ctx:
+        return {"error": "Context not available"}
+        
+    await ctx.debug(f"Client {ctx.client_id or 'Unknown'} checking if secret exists: {name}")
+    
+    try:
+        exists = secrets_manager.has_secret(name)
+        
+        result = {
+            "secret_name": name,
+            "exists": exists
+        }
+        
+        if exists:
+            metadata = secrets_manager.get_secret_metadata(name)
+            if metadata:
+                result["metadata"] = {
+                    "description": metadata.description,
+                    "created_at": metadata.created_at,
+                    "updated_at": metadata.updated_at,
+                    "tags": metadata.tags
+                }
+        
+        await ctx.debug(f"Secret '{name}' exists: {exists}")
+        return result
+        
+    except Exception as e:
+        await ctx.error(f"Error checking secret existence: {str(e)}")
+        return {"error": f"Failed to check secret: {str(e)}"}
+
+
+@mcp.tool()
+async def reload_secrets(ctx: Context = None) -> dict:
+    """Reload secrets from environment variables and encrypted files.
+    
+    This tool clears all existing secrets and reloads them fresh from external 
+    sources (environment variables and encrypted files) without exposing secret values.
+    
+    Returns:
+        Dictionary with reload results and statistics
+    """
+    if not ctx:
+        return {"error": "Context not available"}
+        
+    await ctx.debug(f"Client {ctx.client_id or 'Unknown'} requesting secrets reload")
+    
+    try:
+        result = secrets_manager.reload_secrets()
+        
+        await ctx.info(f"Secrets reloaded successfully: "
+                       f"{result['final_count']} total secrets loaded")
+        
+        return {
+            "status": "success",
+            "reload_summary": {
+                "initial_secret_count": result["initial_count"],
+                "final_secret_count": result["final_count"],
+                "reloaded_from_environment": result["reloaded_environment"],
+                "reloaded_from_encrypted_file": result["reloaded_encrypted_file"]
+            },
+            "message": f"Successfully reloaded {result['final_count']} secrets from external sources."
+        }
+        
+    except Exception as e:
+        await ctx.error(f"Error reloading secrets: {str(e)}")
+        return {"error": f"Failed to reload secrets: {str(e)}"}
 
 
 def main():

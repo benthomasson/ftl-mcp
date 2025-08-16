@@ -8,9 +8,9 @@ This is an advanced MCP (Model Context Protocol) server for high-performance aut
 
 ## Current State
 
-- **Repository Status**: Production-ready automation platform with 46 passing tests
+- **Repository Status**: Production-ready automation platform with 60 passing tests
 - **Structure**: Python package in `src/ftl_mcp/` with comprehensive test coverage
-- **Technology Stack**: Python 3.8+, FastMCP, faster_than_light, ftl_modules, Pydantic, PyYAML
+- **Technology Stack**: Python 3.8+, FastMCP, faster_than_light, ftl_modules, Pydantic, PyYAML, cryptography
 - **Build System**: Hatchling (configured in pyproject.toml)
 - **Testing Framework**: pytest with asyncio support
 
@@ -44,7 +44,7 @@ ruff check src/ tests/
 # Type checking
 mypy src/
 
-# Run all tests (46 tests)
+# Run all tests (62 tests)
 pytest -v
 
 # Run specific test suites
@@ -96,7 +96,12 @@ MCP Client → FTL MCP Server → faster_than_light Execution Engine
 - **get_session_info()**: Retrieve session information
 - **list_active_sessions()**: View all active sessions
 
-### 5. Core Tools
+### 5. Secrets Management (Secure)
+- **get_secrets_status()**: View secrets manager status (safe)
+- **check_secret_exists()**: Check secret existence without exposing values
+- **reload_secrets()**: Reload secrets from environment variables and encrypted files
+
+### 6. Core Tools
 - **get_context_info()**: FastMCP context information
 
 ## Package Structure
@@ -107,7 +112,8 @@ src/ftl_mcp/
 ├── server.py                # Main MCP server (FastMCP tools/resources)
 ├── state.py                 # StateManager with Pydantic models
 ├── tools.py                 # Core business logic functions
-└── ftl_integration.py       # faster_than_light integration layer
+├── ftl_integration.py       # faster_than_light integration layer
+└── secrets.py               # Secure secrets management
 ```
 
 ## Testing Structure
@@ -119,7 +125,8 @@ tests/
 ├── test_state.py                # StateManager and Pydantic models
 ├── test_server_integration.py   # MCP server integration
 ├── test_ansible_integration.py  # Ansible automation workflow
-└── test_playbook_generation.py  # Infrastructure as Code workflow
+├── test_playbook_generation.py  # Infrastructure as Code workflow
+└── test_secrets.py              # Secrets management functionality
 ```
 
 ## FastMCP Usage Patterns
@@ -227,11 +234,12 @@ async def test_tool_functionality():
 ## Important Notes
 
 1. **Virtual Environment**: Always activate `~/venv/ftl/bin/activate` before commands
-2. **Test Coverage**: 46 comprehensive tests cover all functionality
+2. **Test Coverage**: 60 comprehensive tests cover all functionality
 3. **Performance**: 2-10x faster than standard Ansible via faster_than_light
 4. **Infrastructure as Code**: Automatic playbook generation from executed tasks
 5. **State Persistence**: Uses StateManager, not FastMCP context state
 6. **Error Handling**: Comprehensive error handling with context logging
 7. **SSH Management**: Automatic connection pooling and cleanup
+8. **Secrets Security**: Secrets never exposed through MCP tools or logs
 
 This is a production-ready automation platform demonstrating advanced MCP capabilities with high-performance execution and Infrastructure as Code workflows.
