@@ -229,6 +229,7 @@ with open("production_deploy.yml", "w") as f:
 - Pydantic
 - PyYAML
 - faster_than_light
+- ftl_modules (automation modules package)
 - anyio
 
 ## Testing

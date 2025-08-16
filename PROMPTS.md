@@ -236,6 +236,12 @@ This document contains the chronological list of prompts that were used to build
 
 *Removed outdated core tools that were not relevant to the automation focus. Removed get_current_time, calculate_speed, and list_directory MCP tools from server.py, their implementations from tools.py, all related tests from test_tools.py, and updated documentation in README.md and CLAUDE.md. Updated test count from 54 to 46 tests. The server now focuses purely on automation capabilities with faster_than_light integration and Infrastructure as Code workflows.*
 
+## 40. ftl-modules Integration Request
+
+**Prompt:** "Instead of using a hard coded directory for modules use the location of the ftl-modules package. You can read about it here ../ftl-modules/README.md"
+
+*Updated FTL integration to use the ftl-modules package dynamically instead of hard-coded module paths. Added get_ftl_modules_path() function to discover the ftl_modules package location using Python import mechanism. Updated FTLExecutor to use ftl_modules directory with fallback to faster_than_light test modules. Added comprehensive error handling and logging for module path discovery. Updated documentation to reflect ftl_modules dependency. All 46 tests pass with the new dynamic module discovery. The user added test modules to ftl-modules package to support existing tests.*
+
 ---
 
 ## Project Evolution Summary

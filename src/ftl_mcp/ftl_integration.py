@@ -70,6 +70,26 @@ class TaskLogger:
 task_logger = TaskLogger()
 
 
+def get_ftl_modules_path() -> str:
+    """Get the path to the ftl_modules package directory.
+    
+    Returns:
+        Absolute path to the ftl_modules directory containing the modules
+        
+    Raises:
+        ImportError: If ftl_modules package is not installed
+    """
+    try:
+        # Try to import ftl_modules and get its path
+        import ftl_modules
+        module_path = Path(ftl_modules.__file__).parent
+        return str(module_path)
+    except ImportError:
+        raise ImportError(
+            "ftl_modules package not found. Please install it with: pip install -e ../ftl-modules"
+        )
+
+
 class FTLExecutor:
     """Manages faster_than_light execution for MCP tools."""
     
@@ -112,8 +132,18 @@ class FTLExecutor:
             inventory = await self._create_inventory_for_hosts(hosts, ctx)
             
             # Execute module via faster_than_light
-            # Use faster_than_light test modules directory
-            module_dirs = ["/Users/ai/git/faster-than-light/tests/modules"]
+            # Use ftl_modules package directory
+            try:
+                ftl_modules_path = get_ftl_modules_path()
+                module_dirs = [ftl_modules_path]
+                if ctx:
+                    await ctx.debug(f"Using ftl_modules at: {ftl_modules_path}")
+            except ImportError as e:
+                # Fallback to faster_than_light test modules if ftl_modules not available
+                module_dirs = ["/Users/ai/git/faster-than-light/tests/modules"]
+                if ctx:
+                    await ctx.warning(f"ftl_modules not found ({str(e)}), using fallback test modules")
+                    await ctx.debug(f"Using fallback modules at: {module_dirs[0]}")
             
             results = await ftl.run_module(
                 inventory=inventory,

@@ -10,7 +10,7 @@ This is an advanced MCP (Model Context Protocol) server for high-performance aut
 
 - **Repository Status**: Production-ready automation platform with 46 passing tests
 - **Structure**: Python package in `src/ftl_mcp/` with comprehensive test coverage
-- **Technology Stack**: Python 3.8+, FastMCP, faster_than_light, Pydantic, PyYAML
+- **Technology Stack**: Python 3.8+, FastMCP, faster_than_light, ftl_modules, Pydantic, PyYAML
 - **Build System**: Hatchling (configured in pyproject.toml)
 - **Testing Framework**: pytest with asyncio support
 
@@ -173,15 +173,17 @@ Uses StateManager with Pydantic models for type safety:
 
 ### Execution Flow
 1. MCP tool receives request
-2. FTLExecutor processes module execution
-3. SSH gates manage connections
-4. Results returned with performance metrics
-5. TaskLogger records for playbook generation
+2. FTLExecutor discovers ftl_modules package location
+3. faster_than_light executes modules from ftl_modules directory
+4. SSH gates manage connections
+5. Results returned with performance metrics
+6. TaskLogger records for playbook generation
 
 ### Key Classes
 - **FTLExecutor**: Main execution coordinator
 - **TaskLogger**: Records tasks for Infrastructure as Code
 - **FTLExecutionError**: Execution error handling
+- **get_ftl_modules_path()**: Dynamically discovers ftl_modules package location
 
 ## Development Guidelines
 
