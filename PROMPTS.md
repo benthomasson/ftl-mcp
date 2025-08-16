@@ -230,6 +230,12 @@ This document contains the chronological list of prompts that were used to build
 
 *Request to update PROMPTS.md with all conversation prompts while preserving existing entries.*
 
+## 39. Tool Cleanup Request
+
+**Prompt:** "Remove the get_current_time, calculate_speed, and list_directory mcp tools, their tests, and references to them in te documentation."
+
+*Removed outdated core tools that were not relevant to the automation focus. Removed get_current_time, calculate_speed, and list_directory MCP tools from server.py, their implementations from tools.py, all related tests from test_tools.py, and updated documentation in README.md and CLAUDE.md. Updated test count from 54 to 46 tests. The server now focuses purely on automation capabilities with faster_than_light integration and Infrastructure as Code workflows.*
+
 ---
 
 ## Project Evolution Summary
@@ -258,4 +264,4 @@ Each prompt built upon the previous work, creating a comprehensive automation pl
 - Automatic playbook generation for Infrastructure as Code
 - Integration testing with FastMCP Client patterns
 
-The final result is a production-ready automation platform that combines MCP tooling with high-performance execution, enabling both interactive automation and Infrastructure as Code workflows. All 54 tests pass, demonstrating comprehensive functionality from basic tools to advanced automation capabilities.
+The final result is a production-ready automation platform that combines MCP tooling with high-performance execution, enabling both interactive automation and Infrastructure as Code workflows. All 46 tests pass, demonstrating comprehensive functionality from automation tools to advanced Infrastructure as Code capabilities.

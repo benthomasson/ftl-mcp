@@ -17,9 +17,6 @@ An advanced MCP (Model Context Protocol) server for high-performance automation,
 - **clear_playbook_tasks()** - Clear task history to start fresh
 
 ### Core Tools
-- **get_current_time()** - Get the current timestamp in ISO format
-- **calculate_speed(distance, time)** - Calculate speed and determine if it's faster than light
-- **list_directory(path)** - List directory contents with detailed metadata
 - **get_context_info()** - Get FastMCP context information (client ID, request ID, etc.)
 
 ### Session Management
@@ -237,7 +234,7 @@ with open("production_deploy.yml", "w") as f:
 ## Testing
 
 The project includes comprehensive test coverage:
-- **54 tests** covering all functionality
+- **46 tests** covering all functionality
 - **Unit tests** for individual components
 - **Integration tests** for MCP server tools
 - **Ansible execution tests** using faster_than_light test modules

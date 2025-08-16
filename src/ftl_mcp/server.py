@@ -13,9 +13,7 @@ from ftl_mcp.state import (
     SessionData,
     state_manager,
 )
-from ftl_mcp.tools import calculate_speed as _calculate_speed
 from ftl_mcp.tools import get_current_time as _get_current_time
-from ftl_mcp.tools import list_directory as _list_directory
 from ftl_mcp.tools import list_environment_variables as _list_environment_variables
 from ftl_mcp.tools import read_file as _read_file
 from ftl_mcp.ftl_integration import (
@@ -34,71 +32,6 @@ mcp = FastMCP("ftl-mcp")
 _inventory_storage = {"ansible_inventory": None, "inventory_history": []}
 
 
-@mcp.tool()
-async def get_current_time(ctx: Context) -> str:
-    """Get the current time in ISO format."""
-    await ctx.info(f"Client {ctx.client_id or 'Unknown'} requested current time")
-    result = _get_current_time()
-    await ctx.debug(f"Returning time: {result}")
-    return result
-
-
-@mcp.tool()
-async def calculate_speed(distance: float, time: float, ctx: Context) -> dict:
-    """Calculate speed given distance and time.
-
-    Args:
-        distance: Distance in kilometers
-        time: Time in hours
-
-    Returns:
-        Dictionary with speed calculations
-    """
-    await ctx.info(
-        f"Client {ctx.client_id or 'Unknown'} calculating speed: {distance}km in {time}h"
-    )
-
-    try:
-        result = _calculate_speed(distance, time)
-        is_ftl = result.get("is_faster_than_light", False)
-        if is_ftl:
-            await ctx.warning(
-                f"⚡ FASTER THAN LIGHT detected! Speed: {result['speed_ms']:,.0f} m/s"
-            )
-        else:
-            await ctx.debug(f"Normal speed calculated: {result['speed_kmh']} km/h")
-        return result
-    except ValueError as e:
-        await ctx.error(f"Speed calculation failed: {str(e)}")
-        raise
-
-
-@mcp.tool()
-async def list_directory(path: str = ".", ctx: Context = None) -> dict:
-    """List contents of a directory.
-
-    Args:
-        path: Directory path to list (defaults to current directory)
-
-    Returns:
-        Dictionary with directory information
-    """
-    if ctx:
-        await ctx.info(f"Client {ctx.client_id or 'Unknown'} listing directory: {path}")
-
-    try:
-        result = _list_directory(path)
-        if "error" in result:
-            if ctx:
-                await ctx.warning(f"Directory listing failed: {result['error']}")
-        else:
-            if ctx:
-                await ctx.debug(f"Listed {result['item_count']} items in {path}")
-        return result
-    except Exception as e:
-        if ctx:
-            await ctx.error(f"Directory listing error: {str(e)}")
-        raise
 
 
 @mcp.tool()

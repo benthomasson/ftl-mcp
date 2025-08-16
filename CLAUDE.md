@@ -8,7 +8,7 @@ This is an advanced MCP (Model Context Protocol) server for high-performance aut
 
 ## Current State
 
-- **Repository Status**: Production-ready automation platform with 54 passing tests
+- **Repository Status**: Production-ready automation platform with 46 passing tests
 - **Structure**: Python package in `src/ftl_mcp/` with comprehensive test coverage
 - **Technology Stack**: Python 3.8+, FastMCP, faster_than_light, Pydantic, PyYAML
 - **Build System**: Hatchling (configured in pyproject.toml)
@@ -44,7 +44,7 @@ ruff check src/ tests/
 # Type checking
 mypy src/
 
-# Run all tests (54 tests)
+# Run all tests (46 tests)
 pytest -v
 
 # Run specific test suites
@@ -97,9 +97,6 @@ MCP Client → FTL MCP Server → faster_than_light Execution Engine
 - **list_active_sessions()**: View all active sessions
 
 ### 5. Core Tools
-- **get_current_time()**: ISO timestamp generation
-- **calculate_speed()**: Physics calculations with FTL detection
-- **list_directory()**: Directory listing with metadata
 - **get_context_info()**: FastMCP context information
 
 ## Package Structure
@@ -228,7 +225,7 @@ async def test_tool_functionality():
 ## Important Notes
 
 1. **Virtual Environment**: Always activate `~/venv/ftl/bin/activate` before commands
-2. **Test Coverage**: 54 comprehensive tests cover all functionality
+2. **Test Coverage**: 46 comprehensive tests cover all functionality
 3. **Performance**: 2-10x faster than standard Ansible via faster_than_light
 4. **Infrastructure as Code**: Automatic playbook generation from executed tasks
 5. **State Persistence**: Uses StateManager, not FastMCP context state
